@@ -1,0 +1,20 @@
+http://__AV_WEB_BIND__ {
+  root * __AV_EXTRACTED__
+  file_server browse
+
+  handle /By_Date/* {
+    file_server browse
+  }
+
+  handle /Charts/* {
+    file_server browse
+  }
+
+  respond /scripts/adminer* 403
+  respond /scripts/adminer.php 403
+  respond /scripts/adminer-*.php 403
+
+  reverse_proxy /stream localhost:8000
+  php_fastcgi unix/__AV_PHP_FPM_SOCKET__
+  reverse_proxy /stats* localhost:8501
+}

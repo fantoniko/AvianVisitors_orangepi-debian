@@ -1,0 +1,6 @@
+[Unit]
+Description=Run one constrained AvianVisitors admin helper command
+
+[Service]
+Type=oneshot
+ExecStart=__AV_PREFIX__/platforms/orange-pi-zero-3/lib/admin-helper.sh %i

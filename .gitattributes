@@ -1,0 +1,2 @@
+.gitattributes text eol=lf
+platforms/orange-pi-zero-3/** text eol=lf
