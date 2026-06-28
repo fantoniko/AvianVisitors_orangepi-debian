@@ -16,6 +16,10 @@ The Docker host runs:
 - `avian-worker`: periodic OpenClaw generation, background removal, and mask
   rebuilds.
 
+`avian-web` bakes the Caddyfile into its image. The repository checkout is
+mounted only as `/srv/app`, which avoids Portainer file bind-mount issues when
+deploying from Git.
+
 ## Portainer stack
 
 Use this compose path from the repo:

@@ -12,14 +12,15 @@ services:
     restart: unless-stopped
 
   avian-web:
-    image: caddy:2-alpine
+    build:
+      context: ../../..
+      dockerfile: platforms/split-web-host/docker/web.Dockerfile
     depends_on:
       - avian-php
     ports:
       - "${AV_WEB_PORT:-8080}:8080"
     volumes:
       - ../../..:/srv/app:ro
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
 
   avian-worker:
