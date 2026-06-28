@@ -167,7 +167,7 @@ validate_web_bind_available() {
   has_command ss || return 0
   [[ "$port" =~ ^[0-9]+$ ]] || die "Invalid web bind port: $WEB_BIND"
   if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[.:])${port}$"; then
-    if [ -f /etc/caddy/Caddyfile.avian-visitors ] && grep -q "http://$WEB_BIND" /etc/caddy/Caddyfile.avian-visitors; then
+    if [ -f /etc/caddy/Caddyfile.avian-visitors ] && grep -q "bind $host" /etc/caddy/Caddyfile.avian-visitors; then
       log_info "TCP port $port is already used by the existing AvianVisitors Caddy fragment"
       return 0
     fi
@@ -329,7 +329,7 @@ install_units() {
 configure_web() {
   [ "$WEB_MODE" = "local-caddy" ] || return 0
 
-  local php_service socket php_major_minor socket_escaped bind_escaped extracted_escaped
+  local php_service socket php_major_minor socket_escaped bind_host bind_port bind_host_escaped bind_port_escaped extracted_escaped
   php_service="$(detect_php_fpm_service || true)"
   [ -n "$php_service" ] || die "No php-fpm service found"
   php_major_minor="$(printf '%s' "$php_service" | sed -E 's/^php([0-9.]+)-fpm\.service$/\1/')"
@@ -356,10 +356,14 @@ php_admin_value[sys_temp_dir] = /tmp
 EOF
 
   socket_escaped="$(quote_sed_replacement "$socket")"
-  bind_escaped="$(quote_sed_replacement "$WEB_BIND")"
+  bind_host="$(web_bind_host "$WEB_BIND")"
+  bind_port="$(web_bind_port "$WEB_BIND")"
+  bind_host_escaped="$(quote_sed_replacement "$bind_host")"
+  bind_port_escaped="$(quote_sed_replacement "$bind_port")"
   extracted_escaped="$(quote_sed_replacement "$EXTRACTED")"
   sed \
-    -e "s/__AV_WEB_BIND__/$bind_escaped/g" \
+    -e "s/__AV_WEB_HOST__/$bind_host_escaped/g" \
+    -e "s/__AV_WEB_PORT__/$bind_port_escaped/g" \
     -e "s/__AV_EXTRACTED__/$extracted_escaped/g" \
     -e "s/__AV_PHP_FPM_SOCKET__/$socket_escaped/g" \
     "$SCRIPT_DIR/config/caddy.loopback.Caddyfile.template" |

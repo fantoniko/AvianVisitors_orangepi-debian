@@ -119,6 +119,16 @@ def test_caddy_blocks_write_capable_sqlite_ui():
     assert "php_fastcgi" in caddy
 
 
+def test_caddy_external_bind_uses_bind_directive_not_host_matcher():
+    install = read("install.sh")
+    caddy = read("config/caddy.loopback.Caddyfile.template")
+    assert "http://:__AV_WEB_PORT__" in caddy
+    assert "bind __AV_WEB_HOST__" in caddy
+    assert "__AV_WEB_BIND__" not in caddy
+    assert "bind_host=\"$(web_bind_host \"$WEB_BIND\")\"" in install
+    assert "bind_port=\"$(web_bind_port \"$WEB_BIND\")\"" in install
+
+
 def test_systemd_units_have_required_safety_properties():
     for unit in (PLATFORM / "systemd").glob("*.service.in"):
         text = unit.read_text(encoding="utf-8")
