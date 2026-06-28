@@ -24,9 +24,9 @@ database ownership on the machine that writes it.
 
 ## Before you start
 
-Use the same Git branch on both machines. If you are deploying from a fork,
-commit and push these split-LAN changes first, then clone or pull that branch on
-the Orange Pi and on the web host.
+Use the same Git branch on both machines. The Orange Pi Zero 3 installer lives
+on the `orange-pi-zero-3-debian` branch of this fork. If you clone upstream or a
+default branch, the `platforms/` directory may be missing.
 
 Replace the examples below with your real names:
 
@@ -45,7 +45,9 @@ reachable from the LAN web host. On the Orange Pi Zero 3 installer, bind the web
 service to a LAN address instead of loopback-only:
 
 ```sh
-git clone <your-fork-url> ~/AvianVisitors
+git clone --branch orange-pi-zero-3-debian \
+  https://github.com/fantoniko/AvianVisitors_orangepi-debian.git \
+  ~/AvianVisitors
 cd ~/AvianVisitors
 
 bash platforms/orange-pi-zero-3/preflight.sh
@@ -78,9 +80,10 @@ Clone the same branch:
 
 ```sh
 sudo install -d -o "$USER" -g "$USER" /opt/avian-visitors
-git clone <your-fork-url> /opt/avian-visitors/src
+git clone --branch orange-pi-zero-3-debian \
+  https://github.com/fantoniko/AvianVisitors_orangepi-debian.git \
+  /opt/avian-visitors/src
 cd /opt/avian-visitors/src
-git checkout orange-pi-zero-3-debian
 ```
 
 Create a web root that matches the normal BirdNET-Pi install layout. The
