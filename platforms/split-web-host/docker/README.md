@@ -11,14 +11,18 @@ http://op3.lc:8079/avian/api
 
 The Docker host runs:
 
+- `avian-app-init`: copies the Git checkout from the build context into the
+  shared `avian-app` Docker volume;
 - `avian-web`: Caddy, exposed on `AV_WEB_PORT` (default `8080`);
 - `avian-php`: PHP-FPM for `/avian/api/*.php`;
 - `avian-worker`: periodic OpenClaw generation, background removal, and mask
   rebuilds.
 
 `avian-web` bakes the Caddyfile into its image. The repository checkout is
-mounted only as `/srv/app`, which avoids Portainer file bind-mount issues when
-deploying from Git.
+copied into a named Docker volume instead of bind-mounted from Portainer's
+internal `/data/compose/...` directory. This avoids Portainer Git stack path
+issues and lets the worker update generated assets in the same `/srv/app` tree
+that Caddy and PHP read.
 
 ## Portainer stack
 
@@ -92,6 +96,13 @@ If rembg runs out of memory, switch to the lighter model:
 ```sh
 AV_IMAGE_WORKER_CUTOUT_MODEL=u2netp
 ```
+
+## Updating the stack
+
+When Portainer redeploys the stack, `avian-app-init` refreshes the `avian-app`
+volume from the current Git revision. Generated PNGs that are not in Git stay in
+the volume, while tracked files such as `apt.js` are refreshed from Git and then
+the worker can rebuild masks again.
 
 ## Stop only automatic generation
 

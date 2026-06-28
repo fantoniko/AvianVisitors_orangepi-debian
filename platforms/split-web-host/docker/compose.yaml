@@ -1,14 +1,25 @@
 name: avian-visitors
 
 services:
+  avian-app-init:
+    build:
+      context: ../../..
+      dockerfile: platforms/split-web-host/docker/app.Dockerfile
+    volumes:
+      - avian-app:/srv/app
+    restart: "no"
+
   avian-php:
     build:
       context: ../../..
       dockerfile: platforms/split-web-host/docker/php.Dockerfile
+    depends_on:
+      avian-app-init:
+        condition: service_completed_successfully
     environment:
       AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
     volumes:
-      - ../../..:/srv/app
+      - avian-app:/srv/app
     restart: unless-stopped
 
   avian-web:
@@ -20,7 +31,7 @@ services:
     ports:
       - "${AV_WEB_PORT:-8080}:8080"
     volumes:
-      - ../../..:/srv/app:ro
+      - avian-app:/srv/app:ro
     restart: unless-stopped
 
   avian-worker:
@@ -42,9 +53,10 @@ services:
       OPENCLAW_MODEL: ${OPENCLAW_MODEL:-openclaw-image}
       U2NET_HOME: /root/.u2net
     volumes:
-      - ../../..:/srv/app
+      - avian-app:/srv/app
       - avian-u2net:/root/.u2net
     restart: unless-stopped
 
 volumes:
+  avian-app:
   avian-u2net:
