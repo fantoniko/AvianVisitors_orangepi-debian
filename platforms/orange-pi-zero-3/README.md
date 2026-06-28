@@ -86,9 +86,12 @@ Caddy import at `/etc/caddy/Caddyfile.avian-visitors`.
 Binding Caddy to a non-loopback address requires both `--web-bind` and
 `--allow-external-web-bind`.
 
-`livestream.service` is installed but not enabled automatically because this
-safe installer does not overwrite an existing Icecast configuration. Configure
-Icecast credentials and port 8000 deliberately before enabling it.
+`livestream.service` is installed but not enabled automatically. Install and
+configure Icecast deliberately before enabling it:
+
+```bash
+sudo apt-get install icecast2
+```
 
 ## Audio test
 

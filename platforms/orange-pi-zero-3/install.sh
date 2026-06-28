@@ -185,7 +185,6 @@ install_missing_packages() {
     alsa-utils ffmpeg sox libsox-fmt-mp3
     sqlite3 inotify-tools
     php-cli php-fpm php-sqlite3 php-curl php-xml php-zip php-mbstring
-    icecast2
   )
   if [ "$WEB_MODE" = "local-caddy" ]; then
     packages+=(caddy)
