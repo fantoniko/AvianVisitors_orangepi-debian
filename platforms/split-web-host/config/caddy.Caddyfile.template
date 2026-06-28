@@ -1,0 +1,5 @@
+http://__AV_WEB_BIND__ {
+  root * __AV_WEB_ROOT__
+  php_fastcgi unix/__AV_PHP_FPM_SOCKET__
+  file_server
+}

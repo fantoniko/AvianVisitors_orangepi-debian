@@ -67,16 +67,10 @@ Use the Orange Pi host name or a static LAN IP if mDNS names are unreliable.
 
 If the Orange Pi has a firewall, allow only LAN clients to reach TCP 8079.
 
-## Web host package setup
+## Web host install
 
-On a Debian/Ubuntu web host:
-
-```sh
-sudo apt update
-sudo apt install -y caddy git php-fpm php-curl php-sqlite3
-```
-
-Clone the same branch:
+On the Debian/Ubuntu web host, clone the same branch and run the split web host
+installer:
 
 ```sh
 sudo install -d -o "$USER" -g "$USER" /opt/avian-visitors
@@ -84,81 +78,32 @@ git clone --branch orange-pi-zero-3-debian \
   https://github.com/fantoniko/AvianVisitors_orangepi-debian.git \
   /opt/avian-visitors/src
 cd /opt/avian-visitors/src
+
+sudo bash platforms/split-web-host/install.sh \
+  --birdnet-api-base http://orange-pi.local:8079/avian/api \
+  --web-bind 0.0.0.0:8080 \
+  --allow-external-web-bind
 ```
 
-Create a web root that matches the normal BirdNET-Pi install layout. The
-frontend files live at the web root, while `./avian/api/...` remains available
-under the same origin:
+Use the Orange Pi IP address instead of `orange-pi.local` if mDNS names are
+unreliable. The installer handles:
+
+- installing `caddy`, `php-fpm`, `php-curl`, and `php-sqlite3`;
+- creating `/srv/avian-visitors`;
+- linking frontend files and `avian/api`;
+- creating the dedicated PHP-FPM pool;
+- setting `AV_BIRDNET_API_BASE`;
+- importing `/etc/caddy/Caddyfile.avian-visitors-web`;
+- validating and reloading Caddy.
+
+Preview without changing the host:
 
 ```sh
-sudo install -d -o root -g root /srv/avian-visitors
-sudo ln -sfn /opt/avian-visitors/src/avian/frontend/index.html /srv/avian-visitors/index.html
-sudo ln -sfn /opt/avian-visitors/src/avian/frontend/styles.css /srv/avian-visitors/styles.css
-sudo ln -sfn /opt/avian-visitors/src/avian/frontend/apt.js /srv/avian-visitors/apt.js
-sudo ln -sfn /opt/avian-visitors/src/avian/frontend/masks.json /srv/avian-visitors/masks.json
-sudo ln -sfn /opt/avian-visitors/src/avian/frontend/dims.json /srv/avian-visitors/dims.json
-sudo ln -sfn /opt/avian-visitors/src/avian /srv/avian-visitors/avian
-sudo ln -sfn /opt/avian-visitors/src/avian/assets/favicon.png /srv/avian-visitors/favicon.png
-sudo ln -sfn /opt/avian-visitors/src/avian/assets/favicon.png /srv/avian-visitors/favicon.ico
-```
-
-## Web host PHP-FPM
-
-Find the installed PHP-FPM version:
-
-```sh
-php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION.PHP_EOL;'
-```
-
-Create `/etc/php/<version>/fpm/pool.d/avian-visitors-web.conf`:
-
-```ini
-[avian-visitors-web]
-user = www-data
-group = www-data
-listen = /run/php/avian-visitors-web.sock
-listen.owner = caddy
-listen.group = caddy
-listen.mode = 0660
-pm = ondemand
-pm.max_children = 4
-pm.process_idle_timeout = 20s
-chdir = /srv/avian-visitors
-env[AV_BIRDNET_API_BASE] = http://orange-pi.local:8079/avian/api
-```
-
-Change `orange-pi.local` to the Orange Pi IP address if needed.
-
-Reload PHP-FPM:
-
-```sh
-sudo systemctl restart php*-fpm
-```
-
-## Web host Caddy
-
-Create `/etc/caddy/Caddyfile.avian-visitors-web`:
-
-```caddyfile
-http://0.0.0.0:8080 {
-  root * /srv/avian-visitors
-  php_fastcgi unix//run/php/avian-visitors-web.sock
-  file_server
-}
-```
-
-Import it from `/etc/caddy/Caddyfile`:
-
-```caddyfile
-import Caddyfile.avian-visitors-web
-```
-
-Validate and reload:
-
-```sh
-sudo caddy fmt --overwrite /etc/caddy/Caddyfile.avian-visitors-web
-sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-sudo systemctl reload caddy
+sudo bash platforms/split-web-host/install.sh \
+  --birdnet-api-base http://orange-pi.local:8079/avian/api \
+  --web-bind 0.0.0.0:8080 \
+  --allow-external-web-bind \
+  --dry-run
 ```
 
 ## Web host smoke tests
@@ -214,6 +159,16 @@ If PHP proxy files changed, restart PHP-FPM on the web host:
 ```sh
 sudo systemctl restart php*-fpm
 ```
+
+## Web host uninstall
+
+```sh
+cd /opt/avian-visitors/src
+sudo bash platforms/split-web-host/uninstall.sh
+```
+
+This removes the Caddy import, PHP-FPM pool, and `/srv/avian-visitors`. It does
+not remove the source checkout under `/opt/avian-visitors/src`.
 
 ## What stays local
 

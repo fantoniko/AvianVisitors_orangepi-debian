@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORM = ROOT / "platforms" / "orange-pi-zero-3"
+SPLIT_WEB = ROOT / "platforms" / "split-web-host"
 
 
 def read(name: str) -> str:
@@ -130,3 +131,41 @@ def test_systemd_units_have_required_safety_properties():
         assert "NoNewPrivileges=true" in text
         assert "ProtectSystem=strict" in text
         assert "StandardOutput" not in text
+
+
+def test_split_web_host_installer_files_exist():
+    expected = [
+        "README.md",
+        "install.sh",
+        "uninstall.sh",
+        "config/caddy.Caddyfile.template",
+    ]
+    for rel in expected:
+        assert (SPLIT_WEB / rel).is_file(), rel
+
+
+def test_split_web_host_installer_avoids_broad_system_changes():
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in SPLIT_WEB.rglob("*")
+        if path.is_file() and path.suffix in {"", ".sh", ".template", ".md"}
+    )
+    forbidden = [
+        "dist-upgrade",
+        "apt-get upgrade",
+        "apt upgrade",
+        "NOPASSWD: ALL",
+        "eval ",
+        "curl -s",
+        "chmod 777",
+    ]
+    for token in forbidden:
+        assert token not in combined
+
+
+def test_split_web_uninstall_requires_marker_before_recursive_remove():
+    install = (SPLIT_WEB / "install.sh").read_text(encoding="utf-8")
+    uninstall = (SPLIT_WEB / "uninstall.sh").read_text(encoding="utf-8")
+    assert ".avian-visitors-split-web-host" in install
+    assert "refusing to remove unmarked web root" in uninstall
+    assert 'run rm -rf "$WEB_ROOT"' in uninstall
