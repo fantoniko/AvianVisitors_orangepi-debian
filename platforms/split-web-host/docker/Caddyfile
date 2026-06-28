@@ -1,0 +1,31 @@
+:8080 {
+  encode zstd gzip
+
+  handle /favicon.png {
+    root * /srv/app
+    rewrite * /avian/assets/favicon.png
+    file_server
+  }
+
+  handle /favicon.ico {
+    root * /srv/app
+    rewrite * /avian/assets/favicon.png
+    file_server
+  }
+
+  handle /avian/api/*.php {
+    root * /srv/app
+    php_fastcgi avian-php:9000
+  }
+
+  handle /avian/* {
+    root * /srv/app
+    file_server
+  }
+
+  handle {
+    root * /srv/app/avian/frontend
+    try_files {path} /index.html
+    file_server
+  }
+}

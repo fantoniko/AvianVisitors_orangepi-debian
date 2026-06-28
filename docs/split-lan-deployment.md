@@ -122,6 +122,92 @@ sudo bash platforms/orange-pi-zero-3/install.sh --help
 sudo bash platforms/split-web-host/install.sh --help
 ```
 
+If the web host is managed through Docker or Portainer, use the alternative
+stack in [`platforms/split-web-host/docker/`](../platforms/split-web-host/docker/)
+instead of this systemd installer. The Docker stack keeps Caddy, PHP-FPM, and
+the automatic image worker inside containers while still talking to the same
+Orange Pi API.
+
+## Automatic illustration generation
+
+The web host can also run the image pipeline automatically. This watches recent
+BirdNET detections through the web-host API, renders only missing species with
+OpenClaw, removes the flat generated background, rebuilds masks, and bumps the
+frontend cache versions when masks changed.
+
+Keep the OpenClaw credentials in the project, not globally:
+
+```sh
+cd /opt/avian-visitors/src
+touch .env.openclaw
+chmod 600 .env.openclaw
+nano .env.openclaw
+```
+
+Example:
+
+```sh
+OPENCLAW_BASE_URL=http://oc.lc:8088
+OPENCLAW_API_KEY=your-token
+OPENCLAW_MODEL=openclaw-image
+```
+
+Then rerun the web-host deploy with the worker enabled:
+
+```sh
+cd /opt/avian-visitors/src
+git pull
+sudo bash platforms/deploy.sh web-host \
+  --orange-pi-host orange-pi.local \
+  --enable-image-worker
+```
+
+This creates `.venv-cutout`, installs the Python image dependencies there, and
+enables:
+
+```text
+avian-visitors-image-worker.timer
+avian-visitors-image-worker.service
+```
+
+Useful checks:
+
+```sh
+systemctl status avian-visitors-image-worker.timer --no-pager
+systemctl list-timers avian-visitors-image-worker.timer --no-pager
+sudo systemctl start avian-visitors-image-worker.service
+journalctl -u avian-visitors-image-worker.service -n 120 --no-pager
+```
+
+By default the timer runs about once per hour, looks at the last 24 hours, and
+generates up to 20 missing perched illustrations per run. Tune it during
+install if needed:
+
+```sh
+sudo bash platforms/deploy.sh web-host \
+  --orange-pi-host orange-pi.local \
+  --enable-image-worker \
+  --image-worker-interval 2h \
+  --image-worker-hours 48 \
+  --image-worker-limit 10 \
+  --image-worker-size 1536x1024
+```
+
+If the host runs out of memory during background removal, use the lighter model:
+
+```sh
+sudo bash platforms/deploy.sh web-host \
+  --orange-pi-host orange-pi.local \
+  --enable-image-worker \
+  --image-worker-cutout-model u2netp
+```
+
+Disable only the automatic image worker:
+
+```sh
+sudo systemctl disable --now avian-visitors-image-worker.timer
+```
+
 ## Web host smoke tests
 
 The web host should proxy BirdNET data from the Orange Pi:

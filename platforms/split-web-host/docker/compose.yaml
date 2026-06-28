@@ -1,0 +1,49 @@
+name: avian-visitors
+
+services:
+  avian-php:
+    build:
+      context: ../../..
+      dockerfile: platforms/split-web-host/docker/php.Dockerfile
+    environment:
+      AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
+    volumes:
+      - ../../..:/srv/app
+    restart: unless-stopped
+
+  avian-web:
+    image: caddy:2-alpine
+    depends_on:
+      - avian-php
+    ports:
+      - "${AV_WEB_PORT:-8080}:8080"
+    volumes:
+      - ../../..:/srv/app:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+
+  avian-worker:
+    build:
+      context: ../../..
+      dockerfile: platforms/split-web-host/docker/worker.Dockerfile
+    depends_on:
+      - avian-web
+    environment:
+      AV_RECENT_API_URL: ${AV_RECENT_API_URL:-http://avian-web:8080/avian/api/birdnet-api.php?action=recent&hours=24}
+      AV_IMAGE_WORKER_INTERVAL_SECONDS: ${AV_IMAGE_WORKER_INTERVAL_SECONDS:-3600}
+      AV_IMAGE_WORKER_LIMIT: ${AV_IMAGE_WORKER_LIMIT:-20}
+      AV_IMAGE_WORKER_SIZE: ${AV_IMAGE_WORKER_SIZE:-1536x1024}
+      AV_IMAGE_WORKER_CUTOUT_MODEL: ${AV_IMAGE_WORKER_CUTOUT_MODEL:-birefnet-general}
+      AV_HOST_UID: ${AV_HOST_UID:-1000}
+      AV_HOST_GID: ${AV_HOST_GID:-1000}
+      OPENCLAW_BASE_URL: ${OPENCLAW_BASE_URL:?set OPENCLAW_BASE_URL}
+      OPENCLAW_API_KEY: ${OPENCLAW_API_KEY:?set OPENCLAW_API_KEY}
+      OPENCLAW_MODEL: ${OPENCLAW_MODEL:-openclaw-image}
+      U2NET_HOME: /root/.u2net
+    volumes:
+      - ../../..:/srv/app
+      - avian-u2net:/root/.u2net
+    restart: unless-stopped
+
+volumes:
+  avian-u2net:

@@ -42,6 +42,11 @@ if [ -e "$WEB_ROOT" ] && [ ! -f "$WEB_ROOT/.avian-visitors-split-web-host" ]; th
   exit 1
 fi
 
+if systemctl list-unit-files avian-visitors-image-worker.timer --no-legend 2>/dev/null | grep -q .; then
+  run systemctl disable --now avian-visitors-image-worker.timer
+fi
+run rm -f /etc/systemd/system/avian-visitors-image-worker.service
+run rm -f /etc/systemd/system/avian-visitors-image-worker.timer
 run rm -f /etc/caddy/Caddyfile.avian-visitors-web
 if [ -f /etc/caddy/Caddyfile ]; then
   if [ "$DRY_RUN" = "1" ]; then
@@ -55,6 +60,7 @@ if [ -f /etc/caddy/Caddyfile ]; then
 fi
 run rm -f /etc/php/*/fpm/pool.d/avian-visitors-web.conf
 run rm -rf "$WEB_ROOT"
+run systemctl daemon-reload
 
 php_service="$(systemctl list-unit-files 'php*-fpm.service' --no-legend 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
 [ -n "$php_service" ] && run systemctl restart "$php_service"

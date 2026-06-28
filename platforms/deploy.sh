@@ -13,6 +13,12 @@ ORANGE_PI_HOST=""
 START_SERVICES=0
 ALLOW_DEFAULT_AUDIO=0
 WEB_ROOT=""
+ENABLE_IMAGE_WORKER=0
+IMAGE_WORKER_INTERVAL=""
+IMAGE_WORKER_HOURS=""
+IMAGE_WORKER_LIMIT=""
+IMAGE_WORKER_SIZE=""
+IMAGE_WORKER_CUTOUT_MODEL=""
 
 usage() {
   cat <<'EOF'
@@ -30,6 +36,14 @@ Web host options:
   --birdnet-api-base URL    Explicit Orange Pi API base URL
   --web-bind ADDR:PORT      Web UI bind (default: 0.0.0.0:8080)
   --web-root PATH           Web root (default: split-web-host installer default)
+  --enable-image-worker     Install automatic OpenClaw illustration timer
+  --image-worker-interval DUR
+                            Run interval for image timer (default: 1h)
+  --image-worker-hours N    Recent API window for image timer (default: 24)
+  --image-worker-limit N    Maximum species per image timer run (default: 20)
+  --image-worker-size SIZE  OpenClaw image size (default: 1536x1024)
+  --image-worker-cutout-model MODEL
+                            rembg model for cutout.py
 
 Common options:
   --skip-packages           Do not install missing apt packages
@@ -122,6 +136,12 @@ run_web_host() {
   [ "$DRY_RUN" = "1" ] && args+=(--dry-run)
   [ "$SKIP_PACKAGES" = "1" ] && args+=(--skip-packages)
   [ -n "$WEB_ROOT" ] && args+=(--web-root "$WEB_ROOT")
+  [ "$ENABLE_IMAGE_WORKER" = "1" ] && args+=(--enable-image-worker)
+  [ -n "$IMAGE_WORKER_INTERVAL" ] && args+=(--image-worker-interval "$IMAGE_WORKER_INTERVAL")
+  [ -n "$IMAGE_WORKER_HOURS" ] && args+=(--image-worker-hours "$IMAGE_WORKER_HOURS")
+  [ -n "$IMAGE_WORKER_LIMIT" ] && args+=(--image-worker-limit "$IMAGE_WORKER_LIMIT")
+  [ -n "$IMAGE_WORKER_SIZE" ] && args+=(--image-worker-size "$IMAGE_WORKER_SIZE")
+  [ -n "$IMAGE_WORKER_CUTOUT_MODEL" ] && args+=(--image-worker-cutout-model "$IMAGE_WORKER_CUTOUT_MODEL")
 
   run bash "${args[@]}"
 
@@ -147,6 +167,12 @@ while [ "$#" -gt 0 ]; do
     --orange-pi-host) ORANGE_PI_HOST="${2:?missing value after --orange-pi-host}"; shift 2 ;;
     --birdnet-api-base) BIRDNET_API_BASE="${2:?missing value after --birdnet-api-base}"; shift 2 ;;
     --web-root) WEB_ROOT="${2:?missing value after --web-root}"; shift 2 ;;
+    --enable-image-worker) ENABLE_IMAGE_WORKER=1; shift ;;
+    --image-worker-interval) IMAGE_WORKER_INTERVAL="${2:?missing value after --image-worker-interval}"; shift 2 ;;
+    --image-worker-hours) IMAGE_WORKER_HOURS="${2:?missing value after --image-worker-hours}"; shift 2 ;;
+    --image-worker-limit) IMAGE_WORKER_LIMIT="${2:?missing value after --image-worker-limit}"; shift 2 ;;
+    --image-worker-size) IMAGE_WORKER_SIZE="${2:?missing value after --image-worker-size}"; shift 2 ;;
+    --image-worker-cutout-model) IMAGE_WORKER_CUTOUT_MODEL="${2:?missing value after --image-worker-cutout-model}"; shift 2 ;;
     --start-services) START_SERVICES=1; shift ;;
     --allow-default-audio) ALLOW_DEFAULT_AUDIO=1; shift ;;
     --skip-packages) SKIP_PACKAGES=1; shift ;;
