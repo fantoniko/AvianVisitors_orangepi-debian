@@ -50,7 +50,9 @@ Usage:
     # Re-render everything after a prompt change:
     python3 pregen.py --labels ~/BirdNET-Pi/model/labels.txt --force
 
-Set GEMINI_API_KEY in the environment (preferred) or pass --gemini-key.
+Set GEMINI_API_KEY in the environment (preferred) or pass --gemini-key for
+Gemini. For a local OpenAI-compatible image proxy, pass --provider openclaw and
+set OPENCLAW_BASE_URL plus OPENCLAW_API_KEY.
 """
 from __future__ import annotations
 import argparse
@@ -71,6 +73,8 @@ GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-2.5-flash-image:generateContent"
 )
+OPENCLAW_DEFAULT_MODEL = "openclaw-image"
+OPENCLAW_DEFAULT_SIZE = "1024x1024"
 POSES = {1: "perched", 2: "in flight with wings spread"}
 
 # Genera where Gemini's prior collapses to Blue Jay markings unless we
@@ -388,7 +392,44 @@ def _anti_ref_line(anti_ref_key: str | None) -> str:
     )
 
 
-def gen_one(
+def build_prompt_body(
+    prompt: str,
+    sci: str,
+    com: str,
+    pose: int,
+    anti_ref_key: str | None = None,
+    species_note: str | None = None,
+) -> str:
+    body = (prompt
+            .replace("{sci_name}", sci)
+            .replace("{com_name}", com)
+            .replace("{pose}", POSES[pose])
+            .replace("{anti_ref_line}", _anti_ref_line(anti_ref_key)))
+    if species_note:
+        body = body + "\n\nSpecies-specific note: " + species_note
+    return body
+
+
+def reference_payload(path: Path, max_long_side: int | None = None) -> tuple[str, str]:
+    """Return (mime, base64) for an optional reference image."""
+    if max_long_side:
+        try:
+            from PIL import Image
+            from io import BytesIO
+            img = Image.open(path).convert("RGB")
+            w, h = img.size
+            if max(w, h) > max_long_side:
+                scale = max_long_side / max(w, h)
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            buf = BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            return "image/png", base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass
+    return _mime_for(path), base64.b64encode(path.read_bytes()).decode()
+
+
+def gen_one_gemini(
     api_key: str,
     prompt: str,
     sci: str,
@@ -414,13 +455,7 @@ def gen_one(
                   appended as the last paragraph before the reference
                   block.
     """
-    body = (prompt
-            .replace("{sci_name}", sci)
-            .replace("{com_name}", com)
-            .replace("{pose}", POSES[pose])
-            .replace("{anti_ref_line}", _anti_ref_line(anti_ref_key)))
-    if species_note:
-        body = body + "\n\nSpecies-specific note: " + species_note
+    body = build_prompt_body(prompt, sci, com, pose, anti_ref_key, species_note)
 
     parts: list[dict] = [{"text": body}]
     if positive_ref:
@@ -429,25 +464,11 @@ def gen_one(
         # style signal even though the prompt says they're anatomy-only;
         # at 384px the model still reads species/markings/colors but
         # has less photographic detail to mimic.
-        try:
-            from PIL import Image
-            from io import BytesIO
-            img = Image.open(positive_ref).convert("RGB")
-            w, h = img.size
-            if max(w, h) > 384:
-                scale = 384 / max(w, h)
-                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-            buf = BytesIO()
-            img.save(buf, format="PNG", optimize=True)
-            ref_bytes = buf.getvalue()
-            ref_mime = "image/png"
-        except Exception:
-            ref_bytes = positive_ref.read_bytes()
-            ref_mime = _mime_for(positive_ref)
+        ref_mime, ref_b64 = reference_payload(positive_ref, max_long_side=384)
         parts.append({"text": "IMAGE 1 (positive, target species):"})
         parts.append({"inline_data": {
             "mime_type": ref_mime,
-            "data": base64.b64encode(ref_bytes).decode(),
+            "data": ref_b64,
         }})
     if anti_ref:
         anti_name = (ANTI_REFS.get(anti_ref_key or "") or {}).get(
@@ -520,6 +541,109 @@ def gen_one(
     raise RuntimeError(f"no image (finish={finish} block={block})")
 
 
+def gen_one_openclaw(
+    base_url: str,
+    api_key: str,
+    model: str,
+    size: str,
+    prompt: str,
+    sci: str,
+    com: str,
+    pose: int,
+    positive_ref: Path | None = None,
+    anti_ref: Path | None = None,
+    anti_ref_key: str | None = None,
+    species_note: str | None = None,
+    style_ref: Path | None = None,
+) -> bytes:
+    """Single OpenAI-compatible Images API call.
+
+    OpenClaw supports a project-specific `references` extension containing
+    base64 images. Missing references are omitted, matching Gemini mode.
+    """
+    body = build_prompt_body(prompt, sci, com, pose, anti_ref_key, species_note)
+    refs: list[dict] = []
+    if positive_ref:
+        mime, data = reference_payload(positive_ref, max_long_side=384)
+        refs.append({
+            "role": "positive",
+            "label": "target species anatomy reference",
+            "mime_type": mime,
+            "b64_json": data,
+        })
+    if anti_ref:
+        anti_name = (ANTI_REFS.get(anti_ref_key or "") or {}).get(
+            "common_name", "lookalike species"
+        )
+        mime, data = reference_payload(anti_ref)
+        refs.append({
+            "role": "negative",
+            "label": f"{anti_name}, do not copy",
+            "mime_type": mime,
+            "b64_json": data,
+        })
+    if style_ref:
+        mime, data = reference_payload(style_ref)
+        refs.append({
+            "role": "style",
+            "label": "Edo-period kacho-e woodblock style reference",
+            "mime_type": mime,
+            "b64_json": data,
+        })
+
+    payload = {
+        "model": model,
+        "prompt": body,
+        "size": size,
+        "n": 1,
+        "response_format": "b64_json",
+    }
+    if refs:
+        payload["references"] = refs
+
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/images/generations",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    backoff = 4.0
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                resp = json.loads(r.read())
+            break
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            if e.code in (429, 500, 502, 503, 504) and attempt < 3:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise RuntimeError(f"OpenClaw HTTP {e.code}: {detail}") from e
+        except urllib.error.URLError:
+            if attempt < 3:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise
+
+    if isinstance(resp, dict) and resp.get("error"):
+        err = resp["error"]
+        if isinstance(err, dict):
+            raise RuntimeError(err.get("message") or json.dumps(err))
+        raise RuntimeError(str(err))
+
+    data = (resp.get("data") or [{}])[0]
+    b64 = data.get("b64_json")
+    if not b64:
+        raise RuntimeError("OpenClaw response did not include data[0].b64_json")
+    return base64.b64decode(b64)
+
+
 def _mime_for(p: Path) -> str:
     ext = p.suffix.lower()
     if ext in (".jpg", ".jpeg"):
@@ -543,7 +667,17 @@ def main() -> int:
     src.add_argument("--stdin", action="store_true", help="Read Sci|Com lines from stdin")
     ap.add_argument("--ebird-region", help="eBird region code (e.g. US-CA, US-CA-085) to filter labels")
     ap.add_argument("--ebird-key", help="eBird API key (or EBIRD_API_KEY env)")
+    ap.add_argument("--provider", choices=("gemini", "openclaw"), default="gemini",
+                    help="Image provider backend (default: gemini)")
     ap.add_argument("--gemini-key", help="Gemini API key (or GEMINI_API_KEY env)")
+    ap.add_argument("--openclaw-url", help="OpenClaw base URL (or OPENCLAW_BASE_URL env)")
+    ap.add_argument("--openclaw-key", help="OpenClaw bearer token (or OPENCLAW_API_KEY env)")
+    ap.add_argument("--openclaw-model",
+                    default=os.environ.get("OPENCLAW_MODEL", OPENCLAW_DEFAULT_MODEL),
+                    help=f"OpenClaw model name (default: {OPENCLAW_DEFAULT_MODEL})")
+    ap.add_argument("--openclaw-size",
+                    default=os.environ.get("OPENCLAW_SIZE", OPENCLAW_DEFAULT_SIZE),
+                    help=f"OpenClaw output size (default: {OPENCLAW_DEFAULT_SIZE})")
     ap.add_argument("--out", type=Path,
                     default=Path(__file__).resolve().parents[1] / "assets" / "illustrations",
                     help="Output directory (default: avian/assets/illustrations/)")
@@ -571,9 +705,18 @@ def main() -> int:
     args = ap.parse_args()
 
     gemini_key = args.gemini_key or os.environ.get("GEMINI_API_KEY", "")
-    if not gemini_key:
+    openclaw_url = (args.openclaw_url or os.environ.get("OPENCLAW_BASE_URL", "")).rstrip("/")
+    openclaw_key = args.openclaw_key or os.environ.get("OPENCLAW_API_KEY", "")
+    if args.provider == "gemini" and not gemini_key:
         print("error: GEMINI_API_KEY required (--gemini-key or env)", file=sys.stderr)
         return 2
+    if args.provider == "openclaw":
+        if not openclaw_url:
+            print("error: OPENCLAW_BASE_URL required (--openclaw-url or env)", file=sys.stderr)
+            return 2
+        if not openclaw_key:
+            print("error: OPENCLAW_API_KEY required (--openclaw-key or env)", file=sys.stderr)
+            return 2
 
     # Build species list
     if args.labels:
@@ -612,7 +755,7 @@ def main() -> int:
         print(f"[notes] loaded per-species addenda for {len(notes)} species")
 
     total = len(species) * len(args.poses)
-    print(f"generating up to {total} illustrations into {args.out}/")
+    print(f"generating up to {total} illustrations into {args.out}/ via {args.provider}")
     for key, p in anti_paths.items():
         print(f"[refs] {ANTI_REFS[key]['common_name']} anti-reference: {p.name}")
 
@@ -642,11 +785,21 @@ def main() -> int:
                 style_ref_path = args.styles / select_style_ref(sci, pose)
                 if not style_ref_path.exists():
                     style_ref_path = None
-                data = gen_one(gemini_key, prompt, sci, com, pose,
-                               positive_ref=pos_ref, anti_ref=anti,
-                               anti_ref_key=anti_key_for_call,
-                               species_note=notes.get(sci),
-                               style_ref=style_ref_path)
+                if args.provider == "openclaw":
+                    data = gen_one_openclaw(
+                        openclaw_url, openclaw_key, args.openclaw_model,
+                        args.openclaw_size, prompt, sci, com, pose,
+                        positive_ref=pos_ref, anti_ref=anti,
+                        anti_ref_key=anti_key_for_call,
+                        species_note=notes.get(sci),
+                        style_ref=style_ref_path)
+                else:
+                    data = gen_one_gemini(
+                        gemini_key, prompt, sci, com, pose,
+                        positive_ref=pos_ref, anti_ref=anti,
+                        anti_ref_key=anti_key_for_call,
+                        species_note=notes.get(sci),
+                        style_ref=style_ref_path)
                 path.write_bytes(data)
                 done += 1
                 refs_tag = "+ref" if pos_ref else ""

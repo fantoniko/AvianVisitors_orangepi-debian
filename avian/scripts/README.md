@@ -7,7 +7,8 @@ this directory.
 
 ## Pipeline
 
-1. `pregen.py` renders each bird with Gemini 2.5 Flash Image, on a flat cream ground.
+1. `pregen.py` renders each bird with Gemini 2.5 Flash Image or a local
+   OpenClaw-compatible image API, on a flat cream ground.
 2. `cutout.py` removes the ground with BiRefNet and crops to the bird.
 3. `build_masks.py` rebuilds the collage silhouette masks inlined in `apt.js`.
 4. `verify.py` (optional) runs an adversarial species-ID + anatomy check.
@@ -30,6 +31,25 @@ python3 build_masks.py
 directly). `--ebird-region` filters to species actually seen in your region
 (needs `EBIRD_API_KEY`). Re-render one bird with
 `--species "Calypte anna|Anna's Hummingbird" --force`.
+
+To use a LAN OpenClaw image proxy instead of Gemini:
+
+```bash
+export OPENCLAW_BASE_URL='http://openclaw-host.local:8088'
+export OPENCLAW_API_KEY='your-lan-token'
+
+python3 pregen.py \
+  --provider openclaw \
+  --labels ~/BirdNET-Pi/model/labels.txt \
+  --openclaw-size 1024x1024 \
+  --force
+```
+
+The OpenClaw provider calls `/v1/images/generations` with
+`response_format=b64_json` and sends the same anatomy, anti-lookalike, and style
+reference images through the project-specific `references` request field when
+those files are available. If your local proxy does not yet support that
+extension, add `--no-refs` to generate from text prompts only.
 
 ## Why a cream ground
 
