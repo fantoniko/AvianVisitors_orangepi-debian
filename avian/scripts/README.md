@@ -3,7 +3,7 @@
 The collage art is generated, not hand-drawn. The repo ships 498 kachō-e
 illustrations (249 species, a perched and a flight pose each). To restyle
 them or build a set for your own region, the pipeline is four scripts in
-this directory.
+this directory. Run the examples below from the repository root.
 
 ## Pipeline
 
@@ -14,17 +14,21 @@ this directory.
 4. `verify.py` (optional) runs an adversarial species-ID + anatomy check.
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv-cutout
+. .venv-cutout/bin/activate
+python -m pip install --upgrade pip wheel
+python -m pip install -r avian/scripts/requirements.txt
+
 export GEMINI_API_KEY='your-key'
 
 # 1. generate (cream ground) for your region's species
-python3 pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region US-CA
+python avian/scripts/pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region US-CA
 
 # 2. cut the ground off and crop
-python3 cutout.py
+python avian/scripts/cutout.py
 
 # 3. rebuild the collage masks, then bump SKETCH_VERSION + IMG_VERSION in apt.js
-python3 build_masks.py
+python avian/scripts/build_masks.py
 ```
 
 `--labels` takes any `Sci|Com` per-line file (BirdNET-Pi's `labels.txt` works
@@ -38,7 +42,7 @@ To use a LAN OpenClaw image proxy instead of Gemini:
 export OPENCLAW_BASE_URL='http://openclaw-host.local:8088'
 export OPENCLAW_API_KEY='your-lan-token'
 
-python3 pregen.py \
+python avian/scripts/pregen.py \
   --provider openclaw \
   --labels ~/BirdNET-Pi/model/labels.txt \
   --openclaw-size 1024x1024 \
@@ -50,6 +54,41 @@ The OpenClaw provider calls `/v1/images/generations` with
 reference images through the project-specific `references` request field when
 those files are available. If your local proxy does not yet support that
 extension, add `--no-refs` to generate from text prompts only.
+
+After OpenClaw generation, run `cutout.py` before checking the collage. The raw
+image model output is intentionally a flat paper rectangle; `cutout.py` is what
+turns it into transparent RGBA artwork. On memory-constrained hosts, process a
+few slugs at a time:
+
+```bash
+. .venv-cutout/bin/activate
+python avian/scripts/cutout.py parus-major --force
+python avian/scripts/cutout.py turdus-merula --force
+python avian/scripts/cutout.py cyanistes-caeruleus --force
+python avian/scripts/build_masks.py
+```
+
+If BiRefNet is killed by the OOM killer, retry the affected slug with the
+lighter model:
+
+```bash
+python avian/scripts/cutout.py turdus-merula --force --model u2netp
+python avian/scripts/build_masks.py
+```
+
+Verify transparency with:
+
+```bash
+python - <<'PY'
+from PIL import Image
+for slug in ["parus-major", "turdus-merula", "cyanistes-caeruleus"]:
+    im = Image.open(f"avian/assets/illustrations/{slug}.png").convert("RGBA")
+    print(slug, im.getchannel("A").getextrema())
+PY
+```
+
+Each processed image should report an alpha range like `(0, 255)`. `(255, 255)`
+means the square background is still opaque.
 
 ## Why a cream ground
 

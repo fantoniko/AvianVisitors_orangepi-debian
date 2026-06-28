@@ -16,10 +16,14 @@ skipped unless you pass --force.
 Requires rembg + onnxruntime (see requirements.txt). The first run downloads
 the BiRefNet model (~1 GB) to ~/.u2net/.
 
+BiRefNet is memory-heavy. On small web hosts, process one slug per invocation
+or use the lighter `--model u2netp` fallback if the process is killed.
+
 Usage:
     python3 cutout.py                      # process every illustration
     python3 cutout.py calypte-anna         # one slug (both poses)
     python3 cutout.py calypte-anna-2 --force
+    python3 cutout.py calypte-anna --force --model u2netp
 """
 from __future__ import annotations
 import argparse
@@ -48,8 +52,12 @@ def main() -> int:
         from PIL import Image
         from rembg import new_session, remove
     except ImportError:
-        print("error: needs Pillow + rembg (pip install -r requirements.txt)",
-              file=sys.stderr)
+        print(
+            "error: needs Pillow + rembg + onnxruntime. Use a virtualenv, e.g. "
+            "`python3 -m venv .venv-cutout && . .venv-cutout/bin/activate && "
+            "python -m pip install -r avian/scripts/requirements.txt`",
+            file=sys.stderr,
+        )
         return 2
 
     if args.slugs:

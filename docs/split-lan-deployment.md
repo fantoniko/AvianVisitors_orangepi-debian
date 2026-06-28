@@ -65,7 +65,19 @@ curl 'http://orange-pi.local:8079/avian/api/birdnet-api.php?action=stats'
 
 Use the Orange Pi host name or a static LAN IP if mDNS names are unreliable.
 
-If the Orange Pi has a firewall, allow only LAN clients to reach TCP 8079.
+If the Orange Pi has a firewall, allow only the web host to reach TCP 8079. For
+example, if the web host is `192.168.1.8`:
+
+```sh
+sudo ufw allow from 192.168.1.8 to any port 8079 proto tcp comment 'AvianVisitors API from web host'
+sudo ufw status verbose
+```
+
+Use a subnet rule only when every LAN client should be able to call the API:
+
+```sh
+sudo ufw allow from 192.168.1.0/24 to any port 8079 proto tcp comment 'AvianVisitors API LAN'
+```
 
 ## Web host install
 
@@ -117,6 +129,8 @@ http://web-pc.local:8080/avian/api/birdnet-api.php?action=stats
 Or from the web host shell:
 
 ```sh
+curl -v --connect-timeout 3 --max-time 8 \
+  'http://orange-pi.local:8079/avian/api/birdnet-api.php?action=stats'
 curl 'http://127.0.0.1:8080/avian/api/birdnet-api.php?action=stats'
 curl 'http://127.0.0.1:8080/avian/api/birdnet-api.php?action=recent&hours=24'
 ```
@@ -137,6 +151,42 @@ proxies to the Orange Pi:
 The browser still talks to the web host using same-origin URLs, so no CORS
 configuration is needed. Bundled bird illustrations and cutouts are still
 served locally by the web host.
+
+## Testing without a microphone
+
+You can seed a few temporary rows on the Orange Pi to prove that the split web
+host sees live BirdNET data before a USB microphone is attached:
+
+```sh
+sudo -u avianvisitors mkdir -p /home/avianvisitors/BirdNET-Pi/scripts
+sudo cp -a /home/avianvisitors/BirdNET-Pi/scripts/birds.db \
+  "/home/avianvisitors/BirdNET-Pi/scripts/birds.db.backup.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+
+sudo -u avianvisitors sqlite3 /home/avianvisitors/BirdNET-Pi/scripts/birds.db <<'SQL'
+CREATE TABLE IF NOT EXISTS detections (
+  Date TEXT,
+  Time TEXT,
+  Sci_Name TEXT,
+  Com_Name TEXT,
+  Confidence REAL,
+  File_Name TEXT
+);
+
+INSERT INTO detections (Date, Time, Sci_Name, Com_Name, Confidence, File_Name) VALUES
+  (DATE('now','localtime'), TIME('now','localtime'), 'Parus major', 'Great Tit', 0.91, 'test-great-tit.mp3'),
+  (DATE('now','localtime'), TIME('now','localtime'), 'Turdus merula', 'Eurasian Blackbird', 0.88, 'test-blackbird.mp3'),
+  (DATE('now','localtime'), TIME('now','localtime'), 'Cyanistes caeruleus', 'Eurasian Blue Tit', 0.86, 'test-blue-tit.mp3');
+SQL
+```
+
+Then verify from the web host:
+
+```sh
+curl 'http://web-pc.local:8080/avian/api/birdnet-api.php?action=stats'
+curl 'http://web-pc.local:8080/avian/api/birdnet-api.php?action=recent&hours=24'
+```
+
+Keep the backup until real detections are flowing.
 
 ## Updating both machines
 
