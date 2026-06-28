@@ -142,7 +142,8 @@ rm -f "$pool_tmp"
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'; }
 site_tmp="$(mktemp)"
 sed \
-  -e "s/__AV_WEB_BIND__/$(sed_escape "$WEB_BIND")/g" \
+  -e "s/__AV_WEB_HOST__/$(sed_escape "$bind_host")/g" \
+  -e "s/__AV_WEB_PORT__/$(sed_escape "$bind_port")/g" \
   -e "s/__AV_WEB_ROOT__/$(sed_escape "$WEB_ROOT")/g" \
   -e "s/__AV_PHP_FPM_SOCKET__/$(sed_escape "$socket")/g" \
   "$SCRIPT_DIR/config/caddy.Caddyfile.template" > "$site_tmp"
