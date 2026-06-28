@@ -52,10 +52,12 @@ cd ~/AvianVisitors
 
 bash platforms/orange-pi-zero-3/preflight.sh
 
-sudo ./platforms/orange-pi-zero-3/install.sh \
-  --web-bind 0.0.0.0:8079 \
-  --allow-external-web-bind
+sudo bash platforms/deploy.sh orange-pi --allow-from 192.168.1.8
 ```
+
+Replace `192.168.1.8` with the web host IP address. The wrapper calls the
+Orange Pi installer with the LAN bind and, when `ufw` is active, adds the
+matching source-limited firewall rule.
 
 Then verify from the web host:
 
@@ -91,10 +93,7 @@ git clone --branch orange-pi-zero-3-debian \
   /opt/avian-visitors/src
 cd /opt/avian-visitors/src
 
-sudo bash platforms/split-web-host/install.sh \
-  --birdnet-api-base http://orange-pi.local:8079/avian/api \
-  --web-bind 0.0.0.0:8080 \
-  --allow-external-web-bind
+sudo bash platforms/deploy.sh web-host --orange-pi-host orange-pi.local
 ```
 
 Use the Orange Pi IP address instead of `orange-pi.local` if mDNS names are
@@ -111,11 +110,17 @@ unreliable. The installer handles:
 Preview without changing the host:
 
 ```sh
-sudo bash platforms/split-web-host/install.sh \
-  --birdnet-api-base http://orange-pi.local:8079/avian/api \
-  --web-bind 0.0.0.0:8080 \
-  --allow-external-web-bind \
+sudo bash platforms/deploy.sh web-host \
+  --orange-pi-host orange-pi.local \
   --dry-run
+```
+
+The lower-level installers remain available when you need custom paths or
+advanced flags:
+
+```sh
+sudo bash platforms/orange-pi-zero-3/install.sh --help
+sudo bash platforms/split-web-host/install.sh --help
 ```
 
 ## Web host smoke tests

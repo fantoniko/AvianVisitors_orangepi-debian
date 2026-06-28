@@ -90,7 +90,12 @@ For low-power boards such as Orange Pi Zero 3, keep BirdNET-Pi, the microphone,
 recordings, and `birds.db` on the board, then run the AvianVisitors web UI and
 image work on another LAN computer. See
 [`docs/split-lan-deployment.md`](docs/split-lan-deployment.md). The web host
-side has a one-command installer in [`platforms/split-web-host/`](platforms/split-web-host/).
+and Orange Pi sides can both be installed through the wrapper:
+
+```bash
+sudo bash platforms/deploy.sh orange-pi --allow-from <web-host-ip>
+sudo bash platforms/deploy.sh web-host --orange-pi-host <orange-pi-hostname-or-ip>
+```
 
 ---
 

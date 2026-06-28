@@ -155,6 +155,15 @@ def test_split_web_host_installer_files_exist():
         assert (SPLIT_WEB / rel).is_file(), rel
 
 
+def test_deploy_wrapper_exists_and_delegates_to_installers():
+    deploy = (ROOT / "platforms" / "deploy.sh").read_text(encoding="utf-8")
+    assert "orange-pi|web-host" in deploy
+    assert "platforms/orange-pi-zero-3/install.sh" in deploy
+    assert "platforms/split-web-host/install.sh" in deploy
+    assert "--allow-from" in deploy
+    assert "ufw allow from" in deploy
+
+
 def test_split_web_host_installer_avoids_broad_system_changes():
     combined = "\n".join(
         path.read_text(encoding="utf-8")
