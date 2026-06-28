@@ -135,6 +135,10 @@ if has_command arecord; then
   arecord_l="$(arecord -l 2>&1)" && arecord_l_status=0 || arecord_l_status=$?
   if [ "$arecord_l_status" -eq 0 ]; then
     record INFO "alsa.cards" "$(printf '%s' "$arecord_l" | tr '\n' ';' | cut -c1-400)"
+    if printf '%s' "$arecord_l" | grep -qi 'HDMI' &&
+       ! printf '%s' "$arecord_l" | grep -Eqi 'USB|Microphone|Mic|Audio'; then
+      record WARNING "alsa.capture" "Only HDMI-like capture hardware was detected. Plug in the USB microphone and choose a stable REC_CARD from arecord -L before starting services."
+    fi
   else
     record ERROR "alsa.cards" "arecord -l failed: $(printf '%s' "$arecord_l" | tr '\n' ';' | cut -c1-240)"
   fi
@@ -190,9 +194,12 @@ import importlib.util
 import sys
 mods = ["tflite_runtime.interpreter", "tensorflow.lite"]
 for mod in mods:
-    if importlib.util.find_spec(mod):
-        print(mod)
-        sys.exit(0)
+    try:
+        if importlib.util.find_spec(mod):
+            print(mod)
+            sys.exit(0)
+    except ModuleNotFoundError:
+        pass
 print("no tflite runtime import found")
 sys.exit(1)
 PY
