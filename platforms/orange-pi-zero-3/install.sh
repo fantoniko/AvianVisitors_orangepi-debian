@@ -167,7 +167,9 @@ validate_web_bind_available() {
   has_command ss || return 0
   [[ "$port" =~ ^[0-9]+$ ]] || die "Invalid web bind port: $WEB_BIND"
   if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[.:])${port}$"; then
-    if [ -f /etc/caddy/Caddyfile.avian-visitors ] && grep -q "bind $host" /etc/caddy/Caddyfile.avian-visitors; then
+    if [ -f /etc/caddy/Caddyfile.avian-visitors ] &&
+      { grep -q "bind $host" /etc/caddy/Caddyfile.avian-visitors ||
+        grep -q "http://$WEB_BIND" /etc/caddy/Caddyfile.avian-visitors; }; then
       log_info "TCP port $port is already used by the existing AvianVisitors Caddy fragment"
       return 0
     fi

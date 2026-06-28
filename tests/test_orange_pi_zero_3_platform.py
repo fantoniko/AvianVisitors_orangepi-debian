@@ -127,6 +127,7 @@ def test_caddy_external_bind_uses_bind_directive_not_host_matcher():
     assert "__AV_WEB_BIND__" not in caddy
     assert "bind_host=\"$(web_bind_host \"$WEB_BIND\")\"" in install
     assert "bind_port=\"$(web_bind_port \"$WEB_BIND\")\"" in install
+    assert "http://$WEB_BIND" in install
 
 
 def test_systemd_units_have_required_safety_properties():
