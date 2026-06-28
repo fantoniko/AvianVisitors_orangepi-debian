@@ -74,6 +74,19 @@ def is_transparent_png(path: Path) -> bool:
         return im.getchannel("A").getextrema()[0] == 0
 
 
+def load_apt_slugs(apt: Path) -> set[str]:
+    if not apt.exists():
+        return set()
+    src = apt.read_text()
+    match = re.search(r"var DIMS = (\{.*?\});", src)
+    if not match:
+        return set()
+    try:
+        return set(json.loads(match.group(1)))
+    except json.JSONDecodeError:
+        return set()
+
+
 def run(cmd: list[str], *, input_text: str | None = None) -> None:
     print("+ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, input=input_text, text=True, check=True)
@@ -121,6 +134,7 @@ def main() -> int:
     load_env_file(repo / ".env.openclaw")
     illustrations = repo / "avian" / "assets" / "illustrations"
     apt = repo / "avian" / "frontend" / "apt.js"
+    apt_slugs = load_apt_slugs(apt)
     py = sys.executable
 
     args.lock.parent.mkdir(parents=True, exist_ok=True)
@@ -147,6 +161,7 @@ def main() -> int:
 
         missing = []
         needs_cutout = []
+        needs_mask_rebuild = False
         for sci, com in species:
             base = slugify(sci)
             for pose in args.poses:
@@ -157,6 +172,8 @@ def main() -> int:
                     break
                 if not is_transparent_png(path):
                     needs_cutout.append(slug)
+                elif slug not in apt_slugs:
+                    needs_mask_rebuild = True
 
         if missing:
             lines = "\n".join(f"{sci}|{com}" for sci, com in missing) + "\n"
@@ -180,7 +197,7 @@ def main() -> int:
                     needs_cutout.append(slug)
 
         needs_cutout = sorted(set(needs_cutout))
-        if not missing and not needs_cutout:
+        if not missing and not needs_cutout and not needs_mask_rebuild:
             print("all recent species already have transparent illustrations")
             return 0
 

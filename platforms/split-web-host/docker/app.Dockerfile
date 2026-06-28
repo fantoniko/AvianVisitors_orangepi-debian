@@ -1,5 +1,7 @@
 FROM alpine:3.20
 
 COPY . /image-app
+COPY platforms/split-web-host/docker/app-init.sh /usr/local/bin/avian-app-init
+RUN chmod 0755 /usr/local/bin/avian-app-init
 
-CMD ["sh", "-lc", "cp -a /image-app/. /srv/app/"]
+CMD ["/usr/local/bin/avian-app-init"]

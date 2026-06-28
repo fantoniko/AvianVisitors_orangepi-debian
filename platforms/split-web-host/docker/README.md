@@ -100,9 +100,13 @@ AV_IMAGE_WORKER_CUTOUT_MODEL=u2netp
 ## Updating the stack
 
 When Portainer redeploys the stack, `avian-app-init` refreshes the `avian-app`
-volume from the current Git revision. Generated PNGs that are not in Git stay in
-the volume, while tracked files such as `apt.js` are refreshed from Git and then
-the worker can rebuild masks again.
+volume from the current Git revision while preserving generated
+`avian/assets/illustrations/` PNGs and cached `avian/assets/references/`.
+New bundled files from Git remain in place; preserved runtime files are copied
+back over them when names overlap.
+Tracked files such as `apt.js` are refreshed from Git. If a preserved
+transparent PNG is no longer present in `apt.js` after that refresh, the worker
+rebuilds masks without re-running background removal.
 
 ## Stop only automatic generation
 
