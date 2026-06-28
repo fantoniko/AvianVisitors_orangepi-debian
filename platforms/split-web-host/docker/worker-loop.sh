@@ -5,6 +5,8 @@ interval="${AV_IMAGE_WORKER_INTERVAL_SECONDS:-3600}"
 start_delay="${AV_IMAGE_WORKER_START_DELAY_SECONDS:-300}"
 run_on_start="${AV_IMAGE_WORKER_RUN_ON_START:-1}"
 api_url="${AV_RECENT_API_URL:-http://avian-web:8080/avian/api/birdnet-api.php?action=recent&hours=24}"
+state_path="${AV_IMAGE_WORKER_STATE:-/srv/app/avian/runtime/image-worker-state.json}"
+failure_cooldown="${AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS:-86400}"
 limit="${AV_IMAGE_WORKER_LIMIT:-20}"
 size="${AV_IMAGE_WORKER_SIZE:-1536x1024}"
 cutout_model="${AV_IMAGE_WORKER_CUTOUT_MODEL:-birefnet-general}"
@@ -19,6 +21,8 @@ run_once() {
       --provider openclaw \
       --openclaw-size "$size" \
       --limit "$limit" \
+      --state "$state_path" \
+      --failure-cooldown-seconds "$failure_cooldown" \
       --cutout-model "$cutout_model"; then
     echo "avian image worker run completed"
   else

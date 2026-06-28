@@ -56,5 +56,6 @@ whitelist_species_list.txt
 .claude/
 # Large source / reference imagery kept on disk for working
 avian/assets/references/
+avian/runtime/
 # Superseded assets retained locally
 avian/assets/_legacy/

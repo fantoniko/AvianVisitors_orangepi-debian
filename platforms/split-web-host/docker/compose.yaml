@@ -20,6 +20,12 @@ services:
       AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
     volumes:
       - avian-app:/srv/app
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/app/avian/api/birdnet-api.php && php -v >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   avian-web:
@@ -32,6 +38,12 @@ services:
       - "${AV_WEB_PORT:-8080}:8080"
     volumes:
       - avian-app:/srv/app:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   avian-worker:
@@ -45,6 +57,8 @@ services:
       AV_IMAGE_WORKER_INTERVAL_SECONDS: ${AV_IMAGE_WORKER_INTERVAL_SECONDS:-3600}
       AV_IMAGE_WORKER_START_DELAY_SECONDS: ${AV_IMAGE_WORKER_START_DELAY_SECONDS:-300}
       AV_IMAGE_WORKER_RUN_ON_START: ${AV_IMAGE_WORKER_RUN_ON_START:-1}
+      AV_IMAGE_WORKER_STATE: ${AV_IMAGE_WORKER_STATE:-/srv/app/avian/runtime/image-worker-state.json}
+      AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS: ${AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS:-86400}
       AV_IMAGE_WORKER_LIMIT: ${AV_IMAGE_WORKER_LIMIT:-20}
       AV_IMAGE_WORKER_SIZE: ${AV_IMAGE_WORKER_SIZE:-1536x1024}
       AV_IMAGE_WORKER_CUTOUT_MODEL: ${AV_IMAGE_WORKER_CUTOUT_MODEL:-birefnet-general}
@@ -58,6 +72,12 @@ services:
     volumes:
       - avian-app:/srv/app
       - avian-u2net:/root/.u2net
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/app/avian/scripts/auto_illustrate_recent.py"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
 volumes:

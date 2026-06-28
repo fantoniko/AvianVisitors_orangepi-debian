@@ -18,11 +18,20 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def slugify(sci: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", sci.lower()).strip("-")
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def iso(dt: datetime) -> str:
+    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def fetch_recent(api_url: str) -> list[tuple[str, str]]:
@@ -61,6 +70,59 @@ def load_env_file(path: Path) -> None:
         except ValueError:
             parsed = [value.strip()]
         os.environ.setdefault(key, parsed[0] if parsed else "")
+
+
+def load_state(path: Path) -> dict:
+    if not path.exists():
+        return {"failures": {}}
+    try:
+        state = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {"failures": {}}
+    if not isinstance(state, dict):
+        return {"failures": {}}
+    if not isinstance(state.get("failures"), dict):
+        state["failures"] = {}
+    return state
+
+
+def write_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def parse_state_time(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+
+
+def failure_retry_active(state: dict, slug: str, now: datetime) -> bool:
+    rec = state.get("failures", {}).get(slug)
+    if not isinstance(rec, dict):
+        return False
+    retry_after = parse_state_time(str(rec.get("retry_after", "")))
+    return retry_after is not None and retry_after > now
+
+
+def record_failure(state: dict, slug: str, sci: str, com: str, reason: str,
+                   now: datetime, cooldown_seconds: int) -> None:
+    failures = state.setdefault("failures", {})
+    failures[slug] = {
+        "sci": sci,
+        "com": com,
+        "reason": reason,
+        "failed_at": iso(now),
+        "retry_after": iso(datetime.fromtimestamp(now.timestamp() + cooldown_seconds, timezone.utc)),
+    }
+
+
+def clear_failure(state: dict, slug: str) -> None:
+    failures = state.setdefault("failures", {})
+    failures.pop(slug, None)
 
 
 def is_transparent_png(path: Path) -> bool:
@@ -126,6 +188,11 @@ def main() -> int:
                     help="rembg model for cutout.py (default: birefnet-general)")
     ap.add_argument("--repo", type=Path, default=repo,
                     help="repository root (default: auto-detected)")
+    ap.add_argument("--state", type=Path, default=None,
+                    help="worker state JSON (default: avian/runtime/image-worker-state.json)")
+    ap.add_argument("--failure-cooldown-seconds", type=int,
+                    default=int(os.environ.get("AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS", "86400")),
+                    help="seconds before retrying a failed species (default: 86400)")
     ap.add_argument("--lock", type=Path, default=Path("/tmp/avian-visitors-illustrations.lock"),
                     help="lock file to prevent overlapping runs")
     args = ap.parse_args()
@@ -135,6 +202,9 @@ def main() -> int:
     illustrations = repo / "avian" / "assets" / "illustrations"
     apt = repo / "avian" / "frontend" / "apt.js"
     apt_slugs = load_apt_slugs(apt)
+    state_path = args.state or repo / "avian" / "runtime" / "image-worker-state.json"
+    state = load_state(state_path)
+    now = utc_now()
     py = sys.executable
 
     args.lock.parent.mkdir(parents=True, exist_ok=True)
@@ -155,8 +225,18 @@ def main() -> int:
             )
 
         species = fetch_recent(api_url)[: args.limit]
+        seen_slugs = [slugify(sci) for sci, _com in species]
+        stats = {
+            "recent_species": len(species),
+            "skipped_cooldown": 0,
+            "missing_species": 0,
+            "cutout_slugs": 0,
+            "mask_rebuild": False,
+        }
         if not species:
             print("no recent species returned by API")
+            state["last_run"] = {"at": iso(now), "status": "ok", "stats": stats}
+            write_state(state_path, state)
             return 0
 
         missing = []
@@ -164,6 +244,10 @@ def main() -> int:
         needs_mask_rebuild = False
         for sci, com in species:
             base = slugify(sci)
+            if failure_retry_active(state, base, now):
+                stats["skipped_cooldown"] += 1
+                print(f"  [cooldown] {base} skipped until retry_after")
+                continue
             for pose in args.poses:
                 slug = base if pose == 1 else f"{base}-{pose}"
                 path = illustrations / f"{slug}.png"
@@ -175,6 +259,7 @@ def main() -> int:
                 elif slug not in apt_slugs:
                     needs_mask_rebuild = True
 
+        stats["missing_species"] = len(missing)
         if missing:
             lines = "\n".join(f"{sci}|{com}" for sci, com in missing) + "\n"
             cmd = [
@@ -186,10 +271,22 @@ def main() -> int:
             ]
             if args.provider == "openclaw":
                 cmd.extend(["--openclaw-size", args.openclaw_size])
-            run(cmd, input_text=lines)
+            try:
+                run(cmd, input_text=lines)
+            except subprocess.CalledProcessError as exc:
+                reason = f"pregen exited {exc.returncode}"
+                for sci, com in missing:
+                    record_failure(state, slugify(sci), sci, com, reason, now,
+                                   max(0, args.failure_cooldown_seconds))
+                state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
+                                     "error": reason}
+                write_state(state_path, state)
+                raise
 
         for sci, _com in species:
             base = slugify(sci)
+            if failure_retry_active(state, base, now):
+                continue
             for pose in args.poses:
                 slug = base if pose == 1 else f"{base}-{pose}"
                 path = illustrations / f"{slug}.png"
@@ -197,25 +294,53 @@ def main() -> int:
                     needs_cutout.append(slug)
 
         needs_cutout = sorted(set(needs_cutout))
+        stats["cutout_slugs"] = len(needs_cutout)
         if not missing and not needs_cutout and not needs_mask_rebuild:
             print("all recent species already have transparent illustrations")
+            state["last_run"] = {"at": iso(now), "status": "ok", "stats": stats}
+            for slug in seen_slugs:
+                if (illustrations / f"{slug}.png").exists():
+                    clear_failure(state, slug)
+            write_state(state_path, state)
             return 0
 
         for slug in needs_cutout:
-            run([
-                py, str(repo / "avian" / "scripts" / "cutout.py"),
-                slug,
-                "--model", args.cutout_model,
-            ])
+            try:
+                run([
+                    py, str(repo / "avian" / "scripts" / "cutout.py"),
+                    slug,
+                    "--model", args.cutout_model,
+                ])
+            except subprocess.CalledProcessError as exc:
+                reason = f"cutout exited {exc.returncode}"
+                record_failure(state, slug, slug.replace("-", " "), "", reason, now,
+                               max(0, args.failure_cooldown_seconds))
+                state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
+                                     "error": reason}
+                write_state(state_path, state)
+                raise
 
         before = apt.read_text()
-        run([py, str(repo / "avian" / "scripts" / "build_masks.py")])
+        try:
+            run([py, str(repo / "avian" / "scripts" / "build_masks.py")])
+        except subprocess.CalledProcessError as exc:
+            reason = f"build_masks exited {exc.returncode}"
+            state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
+                                 "error": reason}
+            write_state(state_path, state)
+            raise
         after_masks = apt.read_text()
         if after_masks != before:
             bump_cache_versions(apt)
+            stats["mask_rebuild"] = True
             print("frontend masks changed; bumped SKETCH_VERSION and IMG_VERSION")
         else:
             print("frontend masks unchanged")
+        for slug in seen_slugs:
+            if (illustrations / f"{slug}.png").exists() and is_transparent_png(illustrations / f"{slug}.png"):
+                clear_failure(state, slug)
+        state["last_run"] = {"at": iso(now), "status": "ok", "stats": stats}
+        write_state(state_path, state)
 
     return 0
 

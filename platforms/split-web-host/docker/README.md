@@ -43,6 +43,8 @@ OPENCLAW_MODEL=openclaw-image
 AV_IMAGE_WORKER_INTERVAL_SECONDS=3600
 AV_IMAGE_WORKER_START_DELAY_SECONDS=300
 AV_IMAGE_WORKER_RUN_ON_START=1
+AV_IMAGE_WORKER_STATE=/srv/app/avian/runtime/image-worker-state.json
+AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS=86400
 AV_IMAGE_WORKER_LIMIT=20
 AV_IMAGE_WORKER_SIZE=1536x1024
 AV_IMAGE_WORKER_CUTOUT_MODEL=birefnet-general
@@ -110,6 +112,30 @@ The worker does not recursively `chown` generated assets by default because the
 app uses Docker volumes and recursive ownership fixes are expensive on large
 image sets. Set `AV_IMAGE_WORKER_CHOWN=1` only if you need host UID/GID ownership
 fixes for copied-out files.
+
+Failed species are written to `AV_IMAGE_WORKER_STATE` and are not retried until
+`AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS` has elapsed. This prevents one bad
+OpenClaw/rembg failure from consuming every worker cycle.
+
+Inspect worker state:
+
+```sh
+docker exec avian-birds-web-host-avian-worker-1 \
+  sh -lc 'cat /srv/app/avian/runtime/image-worker-state.json'
+```
+
+Container health:
+
+```sh
+docker ps --format 'table {{.Names}}\t{{.Status}}' | grep avian
+```
+
+Expected steady state:
+
+- `avian-app-init`: exited `0`;
+- `avian-web`: running and healthy;
+- `avian-php`: running and healthy;
+- `avian-worker`: running and healthy.
 
 ## Updating the stack
 
