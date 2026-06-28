@@ -160,8 +160,8 @@ def test_deploy_wrapper_exists_and_delegates_to_installers():
     assert "orange-pi|web-host" in deploy
     assert "platforms/orange-pi-zero-3/install.sh" in deploy
     assert "platforms/split-web-host/install.sh" in deploy
-    assert "--allow-from" in deploy
-    assert "ufw allow from" in deploy
+    assert "--allow-from" not in deploy
+    assert "ufw " not in deploy
 
 
 def test_split_web_host_installer_avoids_broad_system_changes():

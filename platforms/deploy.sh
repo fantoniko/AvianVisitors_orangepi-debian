@@ -10,7 +10,6 @@ SKIP_PACKAGES=0
 WEB_BIND=""
 BIRDNET_API_BASE=""
 ORANGE_PI_HOST=""
-ALLOW_FROM=""
 START_SERVICES=0
 ALLOW_DEFAULT_AUDIO=0
 WEB_ROOT=""
@@ -23,7 +22,6 @@ Usage:
 
 Orange Pi options:
   --web-bind ADDR:PORT      API/Caddy bind (default: 0.0.0.0:8079)
-  --allow-from CIDR_OR_IP   If ufw is active, allow this source to TCP 8079
   --start-services          Start BirdNET services after install
   --allow-default-audio     Permit starting services with REC_CARD=default
 
@@ -39,7 +37,7 @@ Common options:
   -h, --help                Show help
 
 Examples:
-  sudo bash platforms/deploy.sh orange-pi --allow-from 192.168.1.8
+  sudo bash platforms/deploy.sh orange-pi
   sudo bash platforms/deploy.sh web-host --orange-pi-host op3.lc
 EOF
 }
@@ -82,23 +80,6 @@ port_from_bind() {
   esac
 }
 
-configure_ufw_allow() {
-  [ -n "$ALLOW_FROM" ] || return 0
-  validate_no_space "$ALLOW_FROM" "--allow-from"
-  local port
-  port="$(port_from_bind "$WEB_BIND")"
-  if ! command -v ufw >/dev/null 2>&1; then
-    info "ufw is not installed; skipping firewall rule"
-    return 0
-  fi
-  if ufw status 2>/dev/null | grep -qi '^Status: active'; then
-    run ufw allow from "$ALLOW_FROM" to any port "$port" proto tcp comment 'AvianVisitors API'
-    run ufw status verbose
-  else
-    info "ufw is inactive; skipping firewall rule"
-  fi
-}
-
 run_orange_pi() {
   need_root
   WEB_BIND="${WEB_BIND:-0.0.0.0:8079}"
@@ -115,7 +96,6 @@ run_orange_pi() {
   [ "$ALLOW_DEFAULT_AUDIO" = "1" ] && args+=(--allow-default-audio)
 
   run bash "${args[@]}"
-  configure_ufw_allow
 
   info "Orange Pi API smoke test:"
   info "curl 'http://127.0.0.1:$(port_from_bind "$WEB_BIND")/avian/api/birdnet-api.php?action=stats'"
@@ -164,7 +144,6 @@ esac
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --web-bind) WEB_BIND="${2:?missing value after --web-bind}"; shift 2 ;;
-    --allow-from) ALLOW_FROM="${2:?missing value after --allow-from}"; shift 2 ;;
     --orange-pi-host) ORANGE_PI_HOST="${2:?missing value after --orange-pi-host}"; shift 2 ;;
     --birdnet-api-base) BIRDNET_API_BASE="${2:?missing value after --birdnet-api-base}"; shift 2 ;;
     --web-root) WEB_ROOT="${2:?missing value after --web-root}"; shift 2 ;;

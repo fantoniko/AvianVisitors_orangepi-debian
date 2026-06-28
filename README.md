@@ -93,7 +93,7 @@ image work on another LAN computer. See
 and Orange Pi sides can both be installed through the wrapper:
 
 ```bash
-sudo bash platforms/deploy.sh orange-pi --allow-from <web-host-ip>
+sudo bash platforms/deploy.sh orange-pi
 sudo bash platforms/deploy.sh web-host --orange-pi-host <orange-pi-hostname-or-ip>
 ```
 

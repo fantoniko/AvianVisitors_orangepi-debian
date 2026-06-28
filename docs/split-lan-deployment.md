@@ -52,12 +52,11 @@ cd ~/AvianVisitors
 
 bash platforms/orange-pi-zero-3/preflight.sh
 
-sudo bash platforms/deploy.sh orange-pi --allow-from 192.168.1.8
+sudo bash platforms/deploy.sh orange-pi
 ```
 
-Replace `192.168.1.8` with the web host IP address. The wrapper calls the
-Orange Pi installer with the LAN bind and, when `ufw` is active, adds the
-matching source-limited firewall rule.
+The wrapper calls the Orange Pi installer with the LAN bind
+`0.0.0.0:8079`.
 
 Then verify from the web host:
 
@@ -67,8 +66,8 @@ curl 'http://orange-pi.local:8079/avian/api/birdnet-api.php?action=stats'
 
 Use the Orange Pi host name or a static LAN IP if mDNS names are unreliable.
 
-If the Orange Pi has a firewall, allow only the web host to reach TCP 8079. For
-example, if the web host is `192.168.1.8`:
+If the Orange Pi has a firewall, allow the web host to reach TCP 8079 using
+your firewall tool. For example, with `ufw` and a web host at `192.168.1.8`:
 
 ```sh
 sudo ufw allow from 192.168.1.8 to any port 8079 proto tcp comment 'AvianVisitors API from web host'
