@@ -84,6 +84,15 @@ See [`avian/forwarding/`](avian/forwarding/) for three independent recipes:
 
 ---
 
+## 5. (Optional) Split the recorder and web host
+
+For low-power boards such as Orange Pi Zero 3, keep BirdNET-Pi, the microphone,
+recordings, and `birds.db` on the board, then run the AvianVisitors web UI and
+image work on another LAN computer. See
+[`docs/split-lan-deployment.md`](docs/split-lan-deployment.md).
+
+---
+
 ## Repo layout
 
 ```

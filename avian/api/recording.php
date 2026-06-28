@@ -12,6 +12,8 @@
 //
 
 declare(strict_types=1);
+require_once __DIR__ . '/remote-proxy.php';
+avian_forward_remote_api('recording.php');
 
 $sci = trim((string)($_GET['sci'] ?? ''));
 $file = trim((string)($_GET['file'] ?? ''));

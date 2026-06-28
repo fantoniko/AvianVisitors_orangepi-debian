@@ -15,6 +15,9 @@
 // /avian/api/* path - see avian/forwarding/.
 
 declare(strict_types=1);
+require_once __DIR__ . '/remote-proxy.php';
+avian_forward_remote_api('birdnet-api.php');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=30');
 

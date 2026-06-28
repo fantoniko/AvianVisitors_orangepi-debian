@@ -13,6 +13,8 @@
 //                                "the most recent" - they can differ).
 
 declare(strict_types=1);
+require_once __DIR__ . '/remote-proxy.php';
+avian_forward_remote_api('spectrogram.php');
 
 $sci = trim((string)($_GET['sci'] ?? ''));
 $file = trim((string)($_GET['file'] ?? ''));

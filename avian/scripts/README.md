@@ -60,6 +60,12 @@ style. `pregen.py` attaches up to three reference images per request:
 
 All three degrade gracefully: a missing reference is simply not attached.
 
+For a one-off manual image in ChatGPT Plus, without using the Gemini/API
+pipeline, use `manual-chatgpt-collage.prompt.md`. Paste the latest bird counts
+from your installation into its `CURRENT BIRD DATA` block and ask ChatGPT to
+generate a single finished collage image. This does not update the bundled PNG
+library or frontend masks; it is for manual poster-style output.
+
 ## Hard species
 
 `species-notes.json` holds one-line diagnostic addenda for species the model
