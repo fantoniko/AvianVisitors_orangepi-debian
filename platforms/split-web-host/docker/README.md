@@ -63,6 +63,7 @@ AV_HOST_UID=1000
 AV_HOST_GID=1000
 AV_ILLUSTRATIONS_VOLUME_NAME=avian-visitors-illustrations
 AV_REFERENCES_VOLUME_NAME=avian-visitors-references
+AV_CUTOUTS_VOLUME_NAME=avian-visitors-cutouts
 AV_RUNTIME_VOLUME_NAME=avian-visitors-runtime
 ```
 
@@ -154,12 +155,15 @@ Expected steady state:
 
 When Portainer redeploys the stack, `avian-app-init` refreshes the `avian-app`
 volume from the current Git revision. Generated `avian/assets/illustrations/`
-PNGs, cached `avian/assets/references/`, and `avian/runtime/` state are mounted
-from fixed-name volumes and are preserved across updates. On the first deploy
-after enabling these volumes, `avian-app-init` also migrates any generated
-files found in the older all-in-one `avian-app` volume layout.
-New bundled files from Git remain in place; preserved runtime files are copied
-back over them when names overlap.
+PNGs, cached `avian/assets/references/`, legacy `avian/assets/cutouts/`, and
+`avian/runtime/` state are mounted from fixed-name volumes and are preserved
+across updates. On the first deploy after enabling these volumes,
+`avian-app-init` migrates matching files from an older all-in-one `avian-app`
+layout, then clears that legacy checkout. This avoids repeated copying of large
+generated assets during normal redeploys.
+
+New bundled files from Git are copied into their matching asset volume before
+legacy files, so user-generated files keep precedence when names overlap.
 Tracked files such as `apt.js` are refreshed from Git. If a preserved
 transparent PNG is no longer present in `apt.js` after that refresh, the worker
 rebuilds masks without re-running background removal.
