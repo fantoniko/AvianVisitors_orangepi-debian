@@ -1,0 +1,47 @@
+name: Publish web deploy branch
+
+on:
+  push:
+    branches:
+      - orange-pi-zero-3-debian
+    paths:
+      - avian/**
+      - platforms/split-web-host/docker/**
+      - portainer-compose.yaml
+      - .github/workflows/publish-web-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-web-deploy
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble minimal Portainer checkout
+        run: |
+          mkdir -p deploy/platforms/split-web-host/docker
+          cp -a avian deploy/avian
+          cp -a platforms/split-web-host/docker/. deploy/platforms/split-web-host/docker/
+          cp portainer-compose.yaml deploy/
+          cp LICENSE deploy/
+          printf '%s\n' "${GITHUB_SHA}" > deploy/SOURCE_COMMIT
+
+      - name: Force-update the deployment branch
+        working-directory: deploy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init -b web-deploy
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add --all
+          git commit -m "Web deploy from ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin web-deploy
