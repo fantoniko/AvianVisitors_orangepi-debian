@@ -1,0 +1,10 @@
+[Unit]
+Description=Publish the bird collage to PocketFrame on a schedule
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

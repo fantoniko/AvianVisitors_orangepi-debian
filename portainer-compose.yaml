@@ -96,6 +96,20 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  avian-pocketframe:
+    profiles: ["pocketframe"]
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-pocketframe:${AV_IMAGE_TAG:-web-deploy}
+    depends_on:
+      - avian-web
+    environment:
+      AV_POCKETFRAME_SOURCE_URL: ${AV_POCKETFRAME_SOURCE_URL:-http://avian-web:8080}
+      AV_POCKETFRAME_INTERVAL_SECONDS: ${AV_POCKETFRAME_INTERVAL_SECONDS:-900}
+      AV_POCKETFRAME_TIMEOUT_SECONDS: ${AV_POCKETFRAME_TIMEOUT_SECONDS:-45}
+      POCKETFRAME_SERVER_URL: ${POCKETFRAME_SERVER_URL:-}
+      POCKETFRAME_TOKEN: ${POCKETFRAME_TOKEN:-}
+      TZ: ${TZ:-Europe/Moscow}
+    restart: unless-stopped
+
 volumes:
   avian-app:
   avian-illustrations:

@@ -6,6 +6,7 @@ on:
       - orange-pi-zero-3-debian
     paths:
       - avian/**
+      - frame/**
       - platforms/split-web-host/docker/**
       - portainer-compose.yaml
       - .github/workflows/publish-web-deploy.yml
@@ -90,6 +91,20 @@ jobs:
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=avian-worker
           cache-to: type=gha,mode=max,scope=avian-worker
+
+      - name: Build and publish PocketFrame publisher
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: platforms/split-web-host/docker/pocketframe.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/avian-visitors-pocketframe:web-deploy
+            ghcr.io/${{ github.repository_owner }}/avian-visitors-pocketframe:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=avian-pocketframe
+          cache-to: type=gha,mode=max,scope=avian-pocketframe
 
   publish-deploy-branch:
     needs: build-images

@@ -76,3 +76,54 @@ python3 generate_illustrations.py --zip 10001 --gemini-key YOUR_GEMINI_KEY
 ```
 
 It generates only the species you're missing; `--country` and `--sample` carry through for non-US postcodes or a wider region.
+
+## Publish to PocketFrame
+
+The same rendered collage can be sent to a local PocketFrame server. The
+publisher posts a raw JPEG body, checks for `201 Created`, and logs the server
+revision. It never reads a token from config or source code.
+
+Create a user-only environment file (do not add it to git):
+
+```bash
+mkdir -p ~/.config
+umask 077
+cat > ~/.config/birdpocketframe.env <<'EOF'
+POCKETFRAME_SERVER_URL=http://192.168.1.8:8090
+POCKETFRAME_TOKEN=replace-with-your-token
+EOF
+chmod 600 ~/.config/birdpocketframe.env
+```
+
+With the regular frame install, test a one-off publication using its existing
+rendering configuration:
+
+```bash
+cd ~/AvianVisitors/frame
+.venv/bin/python publish_pocketframe.py --config ~/.birdframe/config.toml
+```
+
+To run it every 15 minutes, install the accompanying user-specific unit paths
+and enable its timer. The `sed` substitution is the same convention used by
+the frame installer; it does not copy the environment file or its token.
+
+```bash
+cd ~/AvianVisitors/frame
+sed "s|/home/monalisa/AvianVisitors/frame|$PWD|g; s|/home/monalisa|$HOME|g; s|User=monalisa|User=$USER|" \
+  systemd/birdpocketframe.service | sudo tee /etc/systemd/system/birdpocketframe.service >/dev/null
+sudo cp systemd/birdpocketframe.timer /etc/systemd/system/birdpocketframe.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now birdpocketframe.timer
+```
+
+Change `OnUnitActiveSec=15min` in `/etc/systemd/system/birdpocketframe.timer`
+to choose another cadence, then run `sudo systemctl daemon-reload` and
+`sudo systemctl restart birdpocketframe.timer`. View results with
+`journalctl -u birdpocketframe.service`.
+
+For an already-generated image, the publisher can preserve its JPEG/PNG/GIF
+bytes (including JPEG EXIF) instead of rendering a fresh collage:
+
+```bash
+.venv/bin/python publish_pocketframe.py --image output.jpg
+```
