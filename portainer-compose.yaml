@@ -2,9 +2,7 @@ name: avian-visitors
 
 services:
   avian-app-init:
-    build:
-      context: .
-      dockerfile: platforms/split-web-host/docker/app.Dockerfile
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-app-init:${AV_IMAGE_TAG:-web-deploy}
     environment:
       TZ: ${TZ:-Europe/Moscow}
     volumes:
@@ -16,9 +14,7 @@ services:
     restart: "no"
 
   avian-php:
-    build:
-      context: .
-      dockerfile: platforms/split-web-host/docker/php.Dockerfile
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-php:${AV_IMAGE_TAG:-web-deploy}
     depends_on:
       avian-app-init:
         condition: service_completed_successfully
@@ -39,9 +35,7 @@ services:
     restart: unless-stopped
 
   avian-web:
-    build:
-      context: .
-      dockerfile: platforms/split-web-host/docker/web.Dockerfile
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-web:${AV_IMAGE_TAG:-web-deploy}
     depends_on:
       - avian-php
     ports:
@@ -62,9 +56,7 @@ services:
     restart: unless-stopped
 
   avian-worker:
-    build:
-      context: .
-      dockerfile: platforms/split-web-host/docker/worker.Dockerfile
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-worker:${AV_IMAGE_TAG:-web-deploy}
     depends_on:
       - avian-web
     environment:

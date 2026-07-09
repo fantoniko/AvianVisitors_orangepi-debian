@@ -24,6 +24,10 @@ internal `/data/compose/...` directory. Generated illustrations, reference
 photos, and worker runtime state live in separate fixed-name volumes so they
 survive service updates and stack re-creation.
 
+For Portainer, the root stack pulls prebuilt multi-architecture images from
+GitHub Container Registry instead of building them on the web host. The nested
+compose file remains build-based for local development.
+
 ## Portainer stack
 
 Use this compose path from the repo:
@@ -37,11 +41,22 @@ local `docker compose` runs from this directory. Portainer should use the
 root-level file because some Portainer versions intermittently fail to read
 nested stack files during Git redeploys.
 
+The `web-deploy` branch is generated automatically after matching source
+changes. It contains only the web application, Docker configuration, and this
+stack file, keeping Portainer's Git checkout small. The workflow first pushes
+the matching GHCR images and only then updates `web-deploy`.
+
+If the GHCR packages are private, add a Portainer registry credential for
+`ghcr.io` with a GitHub token that has `read:packages`, then select it for this
+stack. Public packages need no registry credential.
+
 Set these environment variables in Portainer:
 
 ```sh
 AV_WEB_PORT=8080
 AV_BIRDNET_API_BASE=http://op3.lc:8079/avian/api
+AV_IMAGE_REGISTRY=ghcr.io/fantoniko
+AV_IMAGE_TAG=web-deploy
 TZ=Europe/Moscow
 OPENCLAW_BASE_URL=http://oc.lc:8088
 OPENCLAW_API_KEY=your-token
