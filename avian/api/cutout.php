@@ -51,13 +51,13 @@ $illustration = dirname(__DIR__) . "/assets/illustrations/{$slug}{$poseSuffix}.p
 if (is_file($illustration) && filesize($illustration) > 1024) {
     serve_png($illustration);
 }
-// Pose-2 missing? Fall back to pose-1 so the flight tab still shows
-// the perched render instead of breaking to the photo fallback.
+// Do not silently substitute the perched render for a missing flight pose.
+// The frontend probes this endpoint and hides an unavailable pose on 404.
 if ($pose !== 1) {
-    $fallback = dirname(__DIR__) . "/assets/illustrations/$slug.png";
-    if (is_file($fallback) && filesize($fallback) > 1024) {
-        serve_png($fallback);
-    }
+    http_response_code(404);
+    header('Content-Type: text/plain');
+    echo 'requested pose is unavailable';
+    exit;
 }
 // 2. Dynamic cache from a previous Wikipedia + rembg run.
 $cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';

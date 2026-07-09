@@ -103,7 +103,7 @@ docker compose logs -f avian-worker
 The worker loops forever. Each run:
 
 1. reads recent species from `AV_RECENT_API_URL` or the internal web URL;
-2. renders only missing illustrations through OpenClaw;
+2. renders only missing perched and in-flight illustrations through OpenClaw;
 3. runs `cutout.py` for generated non-transparent images;
 4. runs `build_masks.py`;
 5. bumps frontend cache versions if masks changed;

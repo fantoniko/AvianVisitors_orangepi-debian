@@ -196,8 +196,8 @@ def main() -> int:
                     help="replace/add hours= in --api-url")
     ap.add_argument("--limit", type=int, default=20,
                     help="maximum recent species to consider (default: 20)")
-    ap.add_argument("--poses", type=int, choices=(1, 2), nargs="+", default=[1],
-                    help="poses to generate; 1=perched, 2=flight (default: 1)")
+    ap.add_argument("--poses", type=int, choices=(1, 2), nargs="+", default=[1, 2],
+                    help="poses to generate; 1=perched, 2=flight (default: 1 2)")
     ap.add_argument("--provider", choices=("gemini", "openclaw"), default="openclaw")
     ap.add_argument("--openclaw-size", default=os.environ.get("OPENCLAW_SIZE", "1536x1024"))
     ap.add_argument("--sleep", type=float, default=2.0,
