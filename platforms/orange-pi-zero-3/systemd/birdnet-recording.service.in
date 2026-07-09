@@ -20,7 +20,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=__AV_HOME__/BirdSongs __AV_PREFIX__ /tmp
-DeviceAllow=/dev/snd/ rw
+DeviceAllow=char-alsa rw
 LockPersonality=true
 MemoryDenyWriteExecute=false
 

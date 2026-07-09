@@ -144,6 +144,12 @@ def test_systemd_units_have_required_safety_properties():
         assert "StandardOutput" not in text
 
 
+def test_recording_unit_allows_alsa_character_devices():
+    recording = read("systemd/birdnet-recording.service.in")
+    assert "DeviceAllow=char-alsa rw" in recording
+    assert "DeviceAllow=/dev/snd/" not in recording
+
+
 def test_split_web_host_installer_files_exist():
     expected = [
         "README.md",

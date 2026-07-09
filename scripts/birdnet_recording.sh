@@ -14,15 +14,15 @@ loop_ffmpeg(){
 # Read the logging level from the configuration option
 LOGGING_LEVEL="${LogLevel_BirdnetRecordingService}"
 # If empty for some reason default to log level of error
-[ -z $LOGGING_LEVEL ] && LOGGING_LEVEL='error'
+[ -z "$LOGGING_LEVEL" ] && LOGGING_LEVEL='error'
 # Additionally if we're at debug or info level then allow printing of script commands and variables
 if [ "$LOGGING_LEVEL" == "info" ] || [ "$LOGGING_LEVEL" == "debug" ];then
   # Enable printing of commands/variables etc to terminal for debugging
   set -x
 fi
 
-[ -z $RECORDING_LENGTH ] && RECORDING_LENGTH=15
-[ -d $RECS_DIR/StreamData ] || mkdir -p $RECS_DIR/StreamData
+[ -z "$RECORDING_LENGTH" ] && RECORDING_LENGTH=15
+[ -d "$RECS_DIR/StreamData" ] || mkdir -p "$RECS_DIR/StreamData"
 
 if [ -n "${RTSP_STREAM}" ];then
   # Explode the RTSP steam setting into an array so we can count the number we have
@@ -46,11 +46,11 @@ if [ -n "${RTSP_STREAM}" ];then
   done
   wait
 else
-  if ! pulseaudio --check;then pulseaudio --start;fi
+  if command -v pulseaudio >/dev/null 2>&1 && ! pulseaudio --check;then pulseaudio --start;fi
   if pgrep arecord &> /dev/null ;then
     echo "Recording"
   else
-    if [ -z ${REC_CARD} ];then
+    if [ -z "${REC_CARD:-}" ];then
       arecord -f S16_LE -c${CHANNELS} -r48000 -t wav --max-file-time ${RECORDING_LENGTH}\
 	      	      	       --use-strftime ${RECS_DIR}/StreamData/%F-birdnet-%H:%M:%S.wav
     else
