@@ -2,13 +2,13 @@
 // AvianVisitors - bird image resolver.
 //
 // Lookup chain for /avian/api/cutout.php?sci=Calypte+anna:
-//   1. ../assets/illustrations/<slug>.png   (450+ bundled kachō-e renders)
-//   2. ../assets/cutouts/<slug>.png         (background-removed photo)
+//   1. ../assets/illustrations/<slug>.png   (generated illustration)
+//   2. ../assets/cutouts/<slug>.png         (background-removed photo fallback)
 //   3. cached rembg of a Wikipedia photo at $HOME/BirdSongs/Extracted/cutouts/
 //   4. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
 //
-// The frontend's <img src> points here for every species - bundled
-// hits return instantly; cold misses fall through to the dynamic path.
+// The frontend's <img src> points here for every species. Generated
+// illustrations return instantly; cold misses fall through to the dynamic path.
 //
 // Default LAN deploy ships without auth. To expose publicly, gate
 // /avian/api/* with basic_auth in your Caddyfile - see avian/forwarding/.
@@ -47,11 +47,10 @@ function serve_png(string $path): void {
     exit;
 }
 
-// 1. Bundled illustration with pose suffix (the kachō-e PNG the repo
-//    ships with). 450+ species cover both perched + flight.
-$bundled = dirname(__DIR__) . "/assets/illustrations/{$slug}{$poseSuffix}.png";
-if (is_file($bundled) && filesize($bundled) > 1024) {
-    serve_png($bundled);
+// 1. Generated illustration with pose suffix.
+$illustration = dirname(__DIR__) . "/assets/illustrations/{$slug}{$poseSuffix}.png";
+if (is_file($illustration) && filesize($illustration) > 1024) {
+    serve_png($illustration);
 }
 // Pose-2 missing? Fall back to pose-1 so the flight tab still shows
 // the perched render instead of breaking to the photo fallback.
@@ -61,8 +60,7 @@ if ($pose !== 1) {
         serve_png($fallback);
     }
 }
-// 2. Bundled cutout (background-removed photo, fallback for species
-//    without an illustration).
+// 2. Bundled cutout (background-removed photo fallback).
 $cutout = dirname(__DIR__) . "/assets/cutouts/$slug.png";
 if (is_file($cutout) && filesize($cutout) > 1024) {
     serve_png($cutout);
@@ -81,7 +79,7 @@ if (is_file($cachePath) && filesize($cachePath) > 1024) {
 $rembg = '/usr/local/bin/rembg-cli';
 if (!is_executable($rembg)) {
     http_response_code(404);
-    echo 'no illustration bundled for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)';
+    echo 'no generated illustration for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)';
     exit;
 }
 

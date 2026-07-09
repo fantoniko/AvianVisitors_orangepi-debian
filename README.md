@@ -58,7 +58,7 @@ Collage: `http://birdnet.local/`. Stock BirdNET-Pi UI: `http://birdnet.local/ind
 
 ## 3. (Optional) Restyle the illustrations
 
-The repo ships with 498 bundled illustrations (249 species, perched + flight). To restyle them or generate a set for your own region:
+The project does not include pre-generated illustration PNGs. Generate a set for your own region:
 
 ```bash
 pip install -r ~/BirdNET-Pi/avian/scripts/requirements.txt
@@ -104,7 +104,7 @@ sudo bash platforms/deploy.sh web-host --orange-pi-host <orange-pi-hostname-or-i
 ```
 avian/                  # everything we add to BirdNET-Pi
 ├── frontend/           # static HTML/JS/CSS for the collage
-├── assets/             # 498 bundled illustrations + photo-cutout fallbacks
+├── assets/             # generated illustrations and photo-cutout fallbacks
 ├── api/                # PHP shims served by BirdNET-Pi's PHP-FPM
 ├── scripts/            # generate -> cutout -> masks pipeline + prompt
 └── forwarding/         # optional HA / MQTT / Cloudflare configs

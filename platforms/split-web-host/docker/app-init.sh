@@ -37,10 +37,8 @@ preserve_dir /srv/app/avian/runtime runtime
 
 cp -a /image-app/. /srv/app/
 
-# Seed the dedicated volumes with bundled Git assets, then put preserved
-# runtime-generated files back on top. Existing generated files win on name
-# overlap, matching the old app-volume preservation behavior.
-restore_dir /image-app/avian/assets/illustrations /srv/generated/illustrations
+# Put preserved runtime-generated files back after refreshing tracked code.
+# The repository intentionally ships without pre-generated illustration PNGs.
 restore_dir "$tmp/illustrations" /srv/generated/illustrations
 restore_dir /image-app/avian/assets/references /srv/generated/references
 restore_dir "$tmp/references" /srv/generated/references
