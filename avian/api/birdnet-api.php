@@ -21,6 +21,14 @@ avian_forward_remote_api('birdnet-api.php');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=30');
 
+$tz = getenv('TZ') ?: '';
+if ($tz === '' && is_readable('/etc/timezone')) {
+    $tz = trim((string)file_get_contents('/etc/timezone'));
+}
+if ($tz !== '' && in_array($tz, DateTimeZone::listIdentifiers(), true)) {
+    date_default_timezone_set($tz);
+}
+
 // PHP resolves __DIR__ through symlinks to the realpath. This script
 // lives at $HOME/BirdNET-Pi/avian/api/birdnet-api.php (served via the
 // ${EXTRACTED}/avian symlink). dirname(..., 2) walks to the BirdNET-Pi

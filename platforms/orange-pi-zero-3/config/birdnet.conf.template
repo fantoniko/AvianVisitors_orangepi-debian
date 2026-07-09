@@ -4,6 +4,7 @@
 ################################################################################
 
 SITE_NAME="AvianVisitors"
+TZ=Europe/Moscow
 
 LATITUDE=0.0000
 LONGITUDE=0.0000

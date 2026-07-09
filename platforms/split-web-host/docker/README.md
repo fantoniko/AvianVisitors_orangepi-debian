@@ -37,6 +37,7 @@ Set these environment variables in Portainer:
 ```sh
 AV_WEB_PORT=8080
 AV_BIRDNET_API_BASE=http://op3.lc:8079/avian/api
+TZ=Europe/Moscow
 OPENCLAW_BASE_URL=http://oc.lc:8088
 OPENCLAW_API_KEY=your-token
 OPENCLAW_MODEL=openclaw-image
