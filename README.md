@@ -104,7 +104,7 @@ sudo bash platforms/deploy.sh web-host --orange-pi-host <orange-pi-hostname-or-i
 ```
 avian/                  # everything we add to BirdNET-Pi
 ├── frontend/           # static HTML/JS/CSS for the collage
-├── assets/             # generated illustrations and photo-cutout fallbacks
+├── assets/             # runtime-generated illustrations and reference photos
 ├── api/                # PHP shims served by BirdNET-Pi's PHP-FPM
 ├── scripts/            # generate -> cutout -> masks pipeline + prompt
 └── forwarding/         # optional HA / MQTT / Cloudflare configs

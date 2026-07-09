@@ -3,9 +3,8 @@
 //
 // Lookup chain for /avian/api/cutout.php?sci=Calypte+anna:
 //   1. ../assets/illustrations/<slug>.png   (generated illustration)
-//   2. ../assets/cutouts/<slug>.png         (background-removed photo fallback)
-//   3. cached rembg of a Wikipedia photo at $HOME/BirdSongs/Extracted/cutouts/
-//   4. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
+//   2. cached rembg of a Wikipedia photo at $HOME/BirdSongs/Extracted/cutouts/
+//   3. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
 //
 // The frontend's <img src> points here for every species. Generated
 // illustrations return instantly; cold misses fall through to the dynamic path.
@@ -60,20 +59,14 @@ if ($pose !== 1) {
         serve_png($fallback);
     }
 }
-// 2. Bundled cutout (background-removed photo fallback).
-$cutout = dirname(__DIR__) . "/assets/cutouts/$slug.png";
-if (is_file($cutout) && filesize($cutout) > 1024) {
-    serve_png($cutout);
-}
-
-// 3. Dynamic cache from a previous Wikipedia + rembg run.
+// 2. Dynamic cache from a previous Wikipedia + rembg run.
 $cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';
 $cachePath = "$cacheDir/$slug.png";
 if (is_file($cachePath) && filesize($cachePath) > 1024) {
     serve_png($cachePath);
 }
 
-// 4. Fresh Wikipedia fetch + rembg. Skipped if rembg-cli isn't on
+// 3. Fresh Wikipedia fetch + rembg. Skipped if rembg-cli isn't on
 //    PATH - the resolver returns a 404 in that case rather than
 //    burning a Wikipedia request we can't use.
 $rembg = '/usr/local/bin/rembg-cli';
