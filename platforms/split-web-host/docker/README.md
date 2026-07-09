@@ -29,8 +29,13 @@ that Caddy and PHP read.
 Use this compose path from the repo:
 
 ```text
-platforms/split-web-host/docker/compose.yaml
+portainer-compose.yaml
 ```
+
+The nested `platforms/split-web-host/docker/compose.yaml` remains available for
+local `docker compose` runs from this directory. Portainer should use the
+root-level file because some Portainer versions intermittently fail to read
+nested stack files during Git redeploys.
 
 Set these environment variables in Portainer:
 
