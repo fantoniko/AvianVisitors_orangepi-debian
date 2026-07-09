@@ -1,0 +1,7 @@
+*
+!avian/
+!avian/**
+!platforms/
+!platforms/split-web-host/
+!platforms/split-web-host/docker/
+!platforms/split-web-host/docker/app-init.sh
