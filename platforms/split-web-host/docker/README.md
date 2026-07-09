@@ -20,9 +20,9 @@ The Docker host runs:
 
 `avian-web` bakes the Caddyfile into its image. The repository checkout is
 copied into a named Docker volume instead of bind-mounted from Portainer's
-internal `/data/compose/...` directory. This avoids Portainer Git stack path
-issues and lets the worker update generated assets in the same `/srv/app` tree
-that Caddy and PHP read.
+internal `/data/compose/...` directory. Generated illustrations, reference
+photos, and worker runtime state live in separate fixed-name volumes so they
+survive service updates and stack re-creation.
 
 ## Portainer stack
 
@@ -61,6 +61,9 @@ AV_ONNX_THREADS=2
 MALLOC_ARENA_MAX=2
 AV_HOST_UID=1000
 AV_HOST_GID=1000
+AV_ILLUSTRATIONS_VOLUME_NAME=avian-visitors-illustrations
+AV_REFERENCES_VOLUME_NAME=avian-visitors-references
+AV_RUNTIME_VOLUME_NAME=avian-visitors-runtime
 ```
 
 Set `AV_HOST_UID` and `AV_HOST_GID` to the Linux owner of the checkout on the
@@ -150,8 +153,11 @@ Expected steady state:
 ## Updating the stack
 
 When Portainer redeploys the stack, `avian-app-init` refreshes the `avian-app`
-volume from the current Git revision while preserving generated
-`avian/assets/illustrations/` PNGs and cached `avian/assets/references/`.
+volume from the current Git revision. Generated `avian/assets/illustrations/`
+PNGs, cached `avian/assets/references/`, and `avian/runtime/` state are mounted
+from fixed-name volumes and are preserved across updates. On the first deploy
+after enabling these volumes, `avian-app-init` also migrates any generated
+files found in the older all-in-one `avian-app` volume layout.
 New bundled files from Git remain in place; preserved runtime files are copied
 back over them when names overlap.
 Tracked files such as `apt.js` are refreshed from Git. If a preserved

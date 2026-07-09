@@ -7,26 +7,43 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ -d /srv/app/avian/assets/illustrations ]; then
-  mkdir -p "$tmp/avian/assets"
-  cp -a /srv/app/avian/assets/illustrations "$tmp/avian/assets/illustrations"
-fi
+preserve_dir() {
+  src="$1"
+  name="$2"
+  if [ -d "$src" ]; then
+    mkdir -p "$tmp/$name"
+    cp -a "$src/." "$tmp/$name/"
+  fi
+}
 
-if [ -d /srv/app/avian/assets/references ]; then
-  mkdir -p "$tmp/avian/assets"
-  cp -a /srv/app/avian/assets/references "$tmp/avian/assets/references"
-fi
+restore_dir() {
+  src="$1"
+  dest="$2"
+  mkdir -p "$dest"
+  if [ -d "$src" ]; then
+    cp -a "$src/." "$dest/"
+  fi
+}
+
+# Preserve from both the dedicated runtime volumes and the older all-in-one
+# app volume layout. This migrates existing generated images on the first
+# deploy after introducing the dedicated volumes.
+preserve_dir /srv/generated/illustrations illustrations
+preserve_dir /srv/app/avian/assets/illustrations illustrations
+preserve_dir /srv/generated/references references
+preserve_dir /srv/app/avian/assets/references references
+preserve_dir /srv/generated/runtime runtime
+preserve_dir /srv/app/avian/runtime runtime
 
 cp -a /image-app/. /srv/app/
 
-if [ -d "$tmp/avian/assets/illustrations" ]; then
-  mkdir -p /srv/app/avian/assets/illustrations
-  cp -a "$tmp/avian/assets/illustrations/." /srv/app/avian/assets/illustrations/
-fi
+# Seed the dedicated volumes with bundled Git assets, then put preserved
+# runtime-generated files back on top. Existing generated files win on name
+# overlap, matching the old app-volume preservation behavior.
+restore_dir /image-app/avian/assets/illustrations /srv/generated/illustrations
+restore_dir "$tmp/illustrations" /srv/generated/illustrations
+restore_dir /image-app/avian/assets/references /srv/generated/references
+restore_dir "$tmp/references" /srv/generated/references
+restore_dir "$tmp/runtime" /srv/generated/runtime
 
-if [ -d "$tmp/avian/assets/references" ]; then
-  mkdir -p /srv/app/avian/assets/references
-  cp -a "$tmp/avian/assets/references/." /srv/app/avian/assets/references/
-fi
-
-printf 'avian app volume refreshed; generated illustrations/references preserved\n'
+printf 'avian app volume refreshed; generated illustrations/references/runtime preserved in dedicated volumes\n'
