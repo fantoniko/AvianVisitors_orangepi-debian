@@ -14,8 +14,28 @@ host_uid="${AV_HOST_UID:-1000}"
 host_gid="${AV_HOST_GID:-1000}"
 chown_enabled="${AV_IMAGE_WORKER_CHOWN:-0}"
 
+export OMP_NUM_THREADS="${AV_ONNX_THREADS:-2}"
+export OPENBLAS_NUM_THREADS="${AV_ONNX_THREADS:-2}"
+export MKL_NUM_THREADS="${AV_ONNX_THREADS:-2}"
+export NUMEXPR_NUM_THREADS="${AV_ONNX_THREADS:-2}"
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
+
+log_runtime_limits() {
+  echo "worker runtime: cutout_model=$cutout_model size=$size limit=$limit threads=${AV_ONNX_THREADS:-2} malloc_arena=$MALLOC_ARENA_MAX"
+  echo "worker runtime: nproc=$(nproc 2>/dev/null || echo unknown)"
+  if command -v free >/dev/null 2>&1; then
+    free -h | sed 's/^/worker memory: /'
+  fi
+  for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current /sys/fs/cgroup/pids.max; do
+    if [ -r "$f" ]; then
+      echo "worker cgroup: $(basename "$f")=$(cat "$f")"
+    fi
+  done
+}
+
 run_once() {
   date -Is
+  log_runtime_limits
   if python /srv/app/avian/scripts/auto_illustrate_recent.py \
       --api-url "$api_url" \
       --provider openclaw \
