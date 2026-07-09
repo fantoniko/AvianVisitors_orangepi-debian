@@ -16,6 +16,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -154,6 +155,23 @@ def run(cmd: list[str], *, input_text: str | None = None) -> None:
     subprocess.run(cmd, input=input_text, text=True, check=True)
 
 
+def run_with_signal_retries(cmd: list[str], *, retries: int, delay: float) -> None:
+    attempts = max(1, retries + 1)
+    for attempt in range(1, attempts + 1):
+        try:
+            run(cmd)
+            return
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode != -9 or attempt >= attempts:
+                raise
+            print(
+                f"command was killed by SIGKILL; retrying in {delay:g}s "
+                f"({attempt}/{attempts - 1})",
+                flush=True,
+            )
+            time.sleep(max(0, delay))
+
+
 def bump_cache_versions(apt: Path) -> None:
     src = apt.read_text()
 
@@ -186,6 +204,12 @@ def main() -> int:
                     help="delay between image requests (default: 2)")
     ap.add_argument("--cutout-model", default="birefnet-general",
                     help="rembg model for cutout.py (default: birefnet-general)")
+    ap.add_argument("--cutout-retries", type=int,
+                    default=int(os.environ.get("AV_IMAGE_WORKER_CUTOUT_RETRIES", "1")),
+                    help="retries when cutout.py is killed by SIGKILL (default: 1)")
+    ap.add_argument("--cutout-retry-delay", type=float,
+                    default=float(os.environ.get("AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY", "15")),
+                    help="seconds before retrying a SIGKILLed cutout.py (default: 15)")
     ap.add_argument("--repo", type=Path, default=repo,
                     help="repository root (default: auto-detected)")
     ap.add_argument("--state", type=Path, default=None,
@@ -306,11 +330,11 @@ def main() -> int:
 
         for slug in needs_cutout:
             try:
-                run([
+                run_with_signal_retries([
                     py, str(repo / "avian" / "scripts" / "cutout.py"),
                     slug,
                     "--model", args.cutout_model,
-                ])
+                ], retries=args.cutout_retries, delay=args.cutout_retry_delay)
             except subprocess.CalledProcessError as exc:
                 reason = f"cutout exited {exc.returncode}"
                 record_failure(state, slug, slug.replace("-", " "), "", reason, now,

@@ -43,6 +43,8 @@ run_once() {
       --limit "$limit" \
       --state "$state_path" \
       --failure-cooldown-seconds "$failure_cooldown" \
+      --cutout-retries "${AV_IMAGE_WORKER_CUTOUT_RETRIES:-1}" \
+      --cutout-retry-delay "${AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY:-15}" \
       --cutout-model "$cutout_model"; then
     echo "avian image worker run completed"
   else
