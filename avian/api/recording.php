@@ -176,9 +176,11 @@ function newest_recording(string $rootDir, string $common): ?string {
     // apostrophe in species dir names, which is why a bird like Anna's
     // Hummingbird could 404 while every other species played fine.
     $norm = function (string $s): string {
-        return preg_replace('/[^a-z0-9]/', '', strtolower($s));
+        $lower = function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+        return (string)preg_replace('/[^\p{L}\p{N}]+/u', '', $lower);
     };
     $want = $norm($common);
+    if ($want === '') return null;
     $dates = scandir($rootDir, SCANDIR_SORT_DESCENDING);
     if (!$dates) return null;
     foreach ($dates as $date) {
@@ -188,7 +190,8 @@ function newest_recording(string $rootDir, string $common): ?string {
         $speciesDir = null;
         foreach (scandir($dayDir) as $sub) {
             if ($sub[0] === '.' || !is_dir("$dayDir/$sub")) continue;
-            if ($norm($sub) === $want) { $speciesDir = "$dayDir/$sub"; break; }
+            $candidate = $norm($sub);
+            if ($candidate !== '' && $candidate === $want) { $speciesDir = "$dayDir/$sub"; break; }
         }
         if ($speciesDir === null) continue;
         $files = scandir($speciesDir, SCANDIR_SORT_DESCENDING);

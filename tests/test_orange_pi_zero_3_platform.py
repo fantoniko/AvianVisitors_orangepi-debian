@@ -92,6 +92,24 @@ def test_managed_prefix_requires_marker_for_removal():
     assert 'find "$PREFIX" -xdev -mindepth 1 -delete' in uninstall
 
 
+def test_database_is_persistent_and_schema_creation_is_idempotent():
+    install = read("install.sh")
+    uninstall = read("uninstall.sh")
+    createdb = (ROOT / "scripts" / "createdb.sh").read_text(encoding="utf-8")
+    backup = (ROOT / "scripts" / "backup_data.sh").read_text(encoding="utf-8")
+
+    assert 'data_db="$DATA_DIR/birds.db"' in install
+    assert 'ln -sfn "$data_db" "$source_db"' in install
+    assert 'BIRDNET_DB_PATH="$DATA_DIR/birds.db"' in install
+    assert "DROP TABLE" not in createdb
+    assert "CREATE TABLE IF NOT EXISTS detections" in createdb
+    assert "CREATE INDEX IF NOT EXISTS" in createdb
+    assert "preserve_legacy_database" in uninstall
+    assert uninstall.index("preserve_legacy_database\nremove_managed_prefix") > 0
+    assert 'database_path="$(readlink -f "$database_path")"' in backup
+    assert '"$database_path"' in backup
+
+
 def test_start_services_requires_explicit_audio_or_override():
     install = read("install.sh")
     assert "ALLOW_DEFAULT_AUDIO=0" in install

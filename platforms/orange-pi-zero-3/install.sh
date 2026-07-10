@@ -260,12 +260,47 @@ configure_data_and_config() {
   ensure_dir "$EXTRACTED/Charts" 0775 "$APP_USER:$APP_USER"
   ensure_dir "/etc/birdnet" 0755 "root:root"
 
-  local user_escaped home_escaped
+  # Keep the mutable database outside the managed source tree.  The symlink
+  # preserves the path expected by existing Python and PHP code, while an
+  # uninstall can remove $PREFIX without deleting detection history.
+  local source_db="$PREFIX/scripts/birds.db"
+  local data_db="$DATA_DIR/birds.db"
+  if [ "$DRY_RUN" = "1" ]; then
+    printf 'DRY-RUN: preserve database at %s and link %s\n' "$data_db" "$source_db"
+  else
+    if [ -L "$source_db" ]; then
+      [ "$(readlink "$source_db")" = "$data_db" ] || die "Refusing to replace unexpected database symlink: $source_db"
+    elif [ -e "$source_db" ]; then
+      [ ! -e "$data_db" ] || die "Both legacy and persistent databases exist; merge them manually: $source_db, $data_db"
+      mv -- "$source_db" "$data_db"
+      chown "$APP_USER:$APP_USER" "$data_db"
+    fi
+    ln -sfn "$data_db" "$source_db"
+    chown -h "$APP_USER:$APP_USER" "$source_db"
+  fi
+  append_manifest "$source_db"
+
+  local user_escaped home_escaped existing_config
   user_escaped="$(quote_sed_replacement "$APP_USER")"
   home_escaped="$(quote_sed_replacement "$APP_HOME")"
-  sed -e "s/__AV_USER__/$user_escaped/g" -e "s/__AV_HOME__/$home_escaped/g" \
-    "$SCRIPT_DIR/config/birdnet.conf.template" |
-    write_file_from_stdin "$PREFIX/birdnet.conf" 0664 "$APP_USER:$APP_USER"
+  existing_config=""
+  if [ -r "$PREFIX/birdnet.conf" ]; then
+    existing_config="$PREFIX/birdnet.conf"
+  elif [ -r /etc/birdnet/birdnet.conf ]; then
+    existing_config=/etc/birdnet/birdnet.conf
+  fi
+
+  if [ -n "$existing_config" ]; then
+    log_info "preserving existing BirdNET configuration and adding missing defaults"
+    merge_config_defaults "$existing_config" <(
+      sed -e "s/__AV_USER__/$user_escaped/g" -e "s/__AV_HOME__/$home_escaped/g" \
+        "$SCRIPT_DIR/config/birdnet.conf.template"
+    ) | write_file_from_stdin "$PREFIX/birdnet.conf" 0664 "$APP_USER:$APP_USER"
+  else
+    sed -e "s/__AV_USER__/$user_escaped/g" -e "s/__AV_HOME__/$home_escaped/g" \
+      "$SCRIPT_DIR/config/birdnet.conf.template" |
+      write_file_from_stdin "$PREFIX/birdnet.conf" 0664 "$APP_USER:$APP_USER"
+  fi
 
   if [ "$DRY_RUN" = "1" ]; then
     printf 'DRY-RUN: link /etc/birdnet/birdnet.conf -> %s\n' "$PREFIX/birdnet.conf"
@@ -411,7 +446,7 @@ EOF
 
 create_db_if_possible() {
   if [ -x "$PREFIX/scripts/createdb.sh" ]; then
-    run_as_user "$APP_USER" env HOME="$APP_HOME" USER="$APP_USER" "$PREFIX/scripts/createdb.sh"
+    run_as_user "$APP_USER" env HOME="$APP_HOME" USER="$APP_USER" BIRDNET_DB_PATH="$DATA_DIR/birds.db" "$PREFIX/scripts/createdb.sh"
   fi
 }
 

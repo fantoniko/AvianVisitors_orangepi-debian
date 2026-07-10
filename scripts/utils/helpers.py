@@ -34,10 +34,9 @@ def get_font():
 class PHPConfigParser(ConfigParser):
     def get(self, section, option, *, raw=False, vars=None, fallback=None):
         value = super().get(section, option, raw=raw, vars=vars, fallback=fallback)
-        if raw:
+        if raw or value is None:
             return value
-        else:
-            return value.strip('"')
+        return value.strip('"')
 
 
 def _load_settings(settings_path='/etc/birdnet/birdnet.conf', force_reload=False):

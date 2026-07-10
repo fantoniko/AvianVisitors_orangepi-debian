@@ -174,7 +174,10 @@ Remove installed files and restore backups:
 sudo bash platforms/orange-pi-zero-3/uninstall.sh
 ```
 
-Recordings and the local database are kept by default. Delete them only with:
+Recordings and the local database are kept by default. The installer stores the
+database at `$HOME/BirdSongs/birds.db` and leaves a compatibility symlink under
+`BirdNET-Pi/scripts/`, so reinstalling or removing the managed source tree does
+not erase detection history. Delete them only with:
 
 ```bash
 sudo bash platforms/orange-pi-zero-3/uninstall.sh --purge-data

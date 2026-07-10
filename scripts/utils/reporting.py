@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import io
 import soundfile
+from contextlib import closing
 from configparser import Error as ConfigError
 from time import sleep
 
@@ -24,7 +25,7 @@ def _config_float(conf, key, default=0.0):
     try:
         value = conf.getfloat(key)
         return default if value is None else value
-    except (ConfigError, KeyError, ValueError):
+    except (ConfigError, KeyError, TypeError, ValueError):
         return default
 
 
@@ -152,25 +153,35 @@ def extract_detection(file: ParseFileName, detection: Detection):
 
 def write_to_db(file: ParseFileName, detection: Detection):
     conf = get_settings()
-    # Connect to SQLite Database
+    file_name = os.path.basename(detection.file_name_extr)
+    values = (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
+              conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
+              conf['OVERLAP'], file_name)
+    last_error = None
     for attempt_number in range(3):
         try:
-            con = sqlite3.connect(DB_PATH)
-            cur = con.cursor()
-            cur.execute("INSERT INTO detections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
-                         conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
-                         conf['OVERLAP'], os.path.basename(detection.file_name_extr)))
-            # (Date, Time, Sci_Name, Com_Name, str(score),
-            # Lat, Lon, Cutoff, Week, Sens,
-            # Overlap, File_Name))
+            # sqlite3.Connection.__exit__ commits or rolls back but does not
+            # close the file descriptor, so use closing() as the outer guard.
+            with closing(sqlite3.connect(DB_PATH, timeout=10)) as con:
+                with con:
+                    # Reporting can be retried after a later step fails. Guard
+                    # by File_Name so replaying a WAV does not duplicate rows.
+                    cursor = con.execute(
+                        """INSERT INTO detections
+                           (Date, Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Week, Sens, Overlap, File_Name)
+                           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                           WHERE NOT EXISTS (SELECT 1 FROM detections WHERE File_Name = ?)""",
+                        values + (file_name,))
+                    if cursor.rowcount == 0:
+                        log.info('Detection already stored; skipping duplicate: %s', file_name)
+            return
+        except sqlite3.OperationalError as error:
+            last_error = error
+            log.warning("Database write attempt %d/3 failed: %s", attempt_number + 1, error)
+            if attempt_number < 2:
+                sleep(2)
 
-            con.commit()
-            con.close()
-            break
-        except BaseException as e:
-            log.warning("Database busy: %s", e)
-            sleep(2)
+    raise RuntimeError(f'Unable to write detection to database after 3 attempts: {last_error}') from last_error
 
 
 def summary(file: ParseFileName, detection: Detection):

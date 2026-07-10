@@ -16,10 +16,10 @@ def get_db():
     return _DB
 
 
-def get_records(select_sql):
+def get_records(select_sql, parameters=()):
     con = get_db()
     try:
-        cur = con.execute(select_sql)
+        cur = con.execute(select_sql, parameters)
         records = cur.fetchall()
     except sqlite3.Error as e:
         print(e)
@@ -40,15 +40,15 @@ def get_latest():
 
 def get_todays_count_for(sci_name):
     today = datetime.now().strftime("%Y-%m-%d")
-    select_sql = f"SELECT COUNT(*) FROM detections WHERE Date = DATE('{today}') AND Sci_Name = '{sci_name}'"
-    records = get_records(select_sql)
+    select_sql = "SELECT COUNT(*) FROM detections WHERE Date = DATE(?) AND Sci_Name = ?"
+    records = get_records(select_sql, (today, sci_name))
     return records[0][0] if records else 0
 
 
 def get_this_weeks_count_for(sci_name):
     today = datetime.now().strftime("%Y-%m-%d")
-    select_sql = f"SELECT COUNT(*) FROM detections WHERE Date >= DATE('{today}', '-7 day') AND Sci_Name = '{sci_name}'"
-    records = get_records(select_sql)
+    select_sql = "SELECT COUNT(*) FROM detections WHERE Date >= DATE(?, '-6 day') AND Sci_Name = ?"
+    records = get_records(select_sql, (today, sci_name))
     return records[0][0] if records else 0
 
 
@@ -56,7 +56,8 @@ def get_summary():
     total_count = get_record("SELECT COUNT(*) as total_count FROM detections")
     todays_count = get_record("SELECT COUNT(*) as todays_count FROM detections WHERE Date == DATE('now', 'localtime')")
     hour_count = get_record("SELECT COUNT(*) as hour_count FROM detections "
-                            "WHERE Date == Date('now', 'localtime') AND TIME >= TIME('now', 'localtime', '-1 hour')")
+                            "WHERE DATETIME(Date || ' ' || Time) BETWEEN "
+                            "DATETIME('now', 'localtime', '-1 hour') AND DATETIME('now', 'localtime')")
     todays_species_tally = get_record("SELECT COUNT(DISTINCT(Sci_Name)) as todays_species_tally FROM detections WHERE Date == Date('now','localtime')")
     species_tally = get_record("SELECT COUNT(DISTINCT(Sci_Name)) as species_tally FROM detections")
 
@@ -65,7 +66,8 @@ def get_summary():
 
 
 def get_species_by(sort_by=None, date=None):
-    where = "" if date is None else f'WHERE Date == "{date}"'
+    where = "" if date is None else "WHERE Date = ?"
+    parameters = () if date is None else (date,)
     if sort_by == "occurrences":
         select_sql = (f"SELECT Date, Time, File_Name, Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConfidence "
                       f"FROM detections {where} GROUP BY Sci_Name ORDER BY COUNT(*) DESC;")
@@ -78,5 +80,5 @@ def get_species_by(sort_by=None, date=None):
     else:
         select_sql = (f"SELECT Date, Time, File_Name, Com_Name, Sci_Name, COUNT(*) as Count, MAX(Confidence) as MaxConfidence "
                       f"FROM detections {where} GROUP BY Sci_Name ORDER BY Com_Name ASC;")
-    records = get_records(select_sql)
+    records = get_records(select_sql, parameters)
     return records

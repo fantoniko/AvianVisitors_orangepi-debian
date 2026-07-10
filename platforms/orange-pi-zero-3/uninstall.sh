@@ -89,7 +89,7 @@ fi
 is_manifest_path_allowed() {
   local path="$1"
   case "$path" in
-    "$PREFIX"|"$PREFIX/$AV_PREFIX_MARKER"|"$APP_HOME"|"$DATA_DIR"|"$DATA_DIR"/*)
+    "$PREFIX"|"$PREFIX"/*|"$APP_HOME"|"$DATA_DIR"|"$DATA_DIR"/*)
       return 0
       ;;
     /etc/birdnet|/etc/birdnet/birdnet.conf)
@@ -138,6 +138,21 @@ remove_managed_prefix() {
   rmdir --ignore-fail-on-non-empty "$PREFIX" 2>/dev/null || true
 }
 
+preserve_legacy_database() {
+  local source_db="$PREFIX/scripts/birds.db"
+  local data_db="$DATA_DIR/birds.db"
+  [ "$PURGE_DATA" != "1" ] || return 0
+  [ -f "$source_db" ] && [ ! -L "$source_db" ] || return 0
+  [ ! -e "$data_db" ] || die "Refusing to overwrite preserved database: $data_db"
+  if [ "$DRY_RUN" = "1" ]; then
+    printf 'DRY-RUN: preserve legacy database %s -> %s\n' "$source_db" "$data_db"
+    return 0
+  fi
+  install -d -m 0775 -o "$APP_USER" -g "$APP_USER" "$DATA_DIR"
+  mv -- "$source_db" "$data_db"
+  chown "$APP_USER:$APP_USER" "$data_db"
+}
+
 for svc in birdnet-recording.service birdnet-analysis.service livestream.service birdnet-stats.service spectrogram-viewer.service; do
   if systemctl list-unit-files "$svc" >/dev/null 2>&1; then
     run_cmd systemctl disable --now "$svc"
@@ -169,6 +184,7 @@ fi
   remove_file_or_empty_dir "$path"
 done
 
+preserve_legacy_database
 remove_managed_prefix
 
 if [ "$PURGE_DATA" = "1" ] && [ -d "$DATA_DIR" ]; then

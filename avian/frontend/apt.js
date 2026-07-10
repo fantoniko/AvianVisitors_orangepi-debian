@@ -1396,6 +1396,17 @@
       renderCollageFromData(animate);
     });
   }
+  function refreshLive(animate) {
+    var forHours = currentHours;
+    return Promise.all([
+      fetchJson('./avian/api/birdnet-api.php?action=stats').catch(function () { return null; }),
+      fetchJson('./avian/api/birdnet-api.php?action=recent&hours=' + forHours).catch(function () { return null; }),
+    ]).then(function (parts) {
+      if (parts[0]) DATA.stats = parts[0];
+      if (forHours === currentHours && parts[1]) DATA.recent = parts[1];
+      renderWindowDependent(animate);
+    });
+  }
 
   // Kick off the initial fetch. Renders pull from DATA as soon as it
   // populates; until then the page sits with empty histograms + lists.
@@ -1409,18 +1420,20 @@
   });
 
   // ---- Realtime polling ----
-  // Every POLL_MS the page refetches the live data set so the collage,
-  // stats, and atlas reflect new detections without a manual reload.
-  // We use refreshAll() (cheap: 5 small JSON fetches) so the dependent
-  // text/charts update too. Polling pauses when the tab is hidden and
-  // resumes (with an immediate fetch) when it becomes visible again.
+  // Refresh the live counters and collage every 30 seconds.  Lifelist,
+  // first-seen, and 30-day aggregates are substantially more expensive and
+  // only need a full refresh every five minutes.
   var POLL_MS = 30 * 1000;
+  var FULL_REFRESH_EVERY = 10;
+  var pollCount = 0;
   var pollTimer = null;
   function startPolling() {
     stopPolling();
     pollTimer = setInterval(function () {
       if (document.hidden) return;
-      refreshAll();
+      pollCount += 1;
+      if (pollCount % FULL_REFRESH_EVERY === 0) refreshAll();
+      else refreshLive();
     }, POLL_MS);
   }
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }

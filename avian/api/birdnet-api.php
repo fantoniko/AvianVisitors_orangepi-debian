@@ -75,9 +75,9 @@ switch ($action) {
         $species     = (int)(one($db, 'SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections')['n'] ?? 0);
         $today       = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date = DATE('now','localtime')")['n'] ?? 0);
         $todaySpec   = (int)(one($db, "SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections WHERE Date = DATE('now','localtime')")['n'] ?? 0);
-        $lastHour    = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date = DATE('now','localtime') AND Time >= TIME('now','localtime','-1 hour')")['n'] ?? 0);
-        $week        = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date >= DATE('now','localtime','-7 day')")['n'] ?? 0);
-        $weekSpec    = (int)(one($db, "SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections WHERE Date >= DATE('now','localtime','-7 day')")['n'] ?? 0);
+        $lastHour    = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE DATETIME(Date||' '||Time) BETWEEN DATETIME('now','localtime','-1 hour') AND DATETIME('now','localtime')")['n'] ?? 0);
+        $week        = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date >= DATE('now','localtime','-6 day')")['n'] ?? 0);
+        $weekSpec    = (int)(one($db, "SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections WHERE Date >= DATE('now','localtime','-6 day')")['n'] ?? 0);
         $first       = one($db, 'SELECT MIN(Date) AS d FROM detections');
         echo json_encode([
             'totals'    => ['detections' => $total, 'species' => $species],
@@ -107,29 +107,25 @@ switch ($action) {
         // "ALL" button can turn off the time filter without needing a
         // separate code path.
         $hours = max(1, min(1000000, (int)($_GET['hours'] ?? 24)));
-        // species-collapsed view: one row per species seen in the window,
-        // with the file of its highest-confidence detection inside the window.
+        $cutoff = time() - ($hours * 3600);
+        $cutoffDate = date('Y-m-d', $cutoff);
+        $cutoffTime = date('H:i:s', $cutoff);
+        // Compare the stored date and time columns directly so SQLite can use
+        // detections_Date_Time instead of applying julianday() to every row.
         $rs = rows($db,
-          "SELECT Sci_Name AS sci, Com_Name AS com, COUNT(*) AS n, MAX(Confidence) AS best_conf, "
-        . "       MAX(Date||' '||Time) AS last_seen "
-        . "FROM detections "
-        . "WHERE (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs "
-        . "GROUP BY Sci_Name ORDER BY last_seen DESC",
-          [':hrs' => $hours]
+          "WITH windowed AS ("
+        . "  SELECT *, ROW_NUMBER() OVER ("
+        . "    PARTITION BY Sci_Name ORDER BY Confidence DESC, Date DESC, Time DESC"
+        . "  ) AS confidence_rank "
+        . "  FROM detections WHERE (Date, Time) >= (:cutoff_date, :cutoff_time)"
+        . ") "
+        . "SELECT Sci_Name AS sci, MAX(Com_Name) AS com, COUNT(*) AS n, "
+        . "       MAX(Confidence) AS best_conf, MAX(Date||' '||Time) AS last_seen, "
+        . "       MAX(CASE WHEN confidence_rank = 1 THEN File_Name END) AS top_file, "
+        . "       MAX(CASE WHEN confidence_rank = 1 THEN Date||' '||Time END) AS top_at "
+        . "FROM windowed GROUP BY Sci_Name ORDER BY last_seen DESC",
+          [':cutoff_date' => $cutoffDate, ':cutoff_time' => $cutoffTime]
         );
-        // for each row, attach the file of the top-confidence detection in the window
-        foreach ($rs as &$r) {
-            $best = one($db,
-              "SELECT File_Name AS file, Date AS d, Time AS t, Confidence AS conf "
-            . "FROM detections "
-            . "WHERE Sci_Name = :sn "
-            . "AND (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs "
-            . "ORDER BY Confidence DESC LIMIT 1",
-              [':sn' => $r['sci'], ':hrs' => $hours]
-            );
-            $r['top_file'] = $best['file'] ?? null;
-            $r['top_at']   = isset($best['d']) ? ($best['d'].' '.$best['t']) : null;
-        }
         echo json_encode(['hours' => $hours, 'species' => $rs, 'as_of' => date('c')]);
         break;
     }

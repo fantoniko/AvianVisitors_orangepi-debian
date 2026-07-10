@@ -158,6 +158,40 @@ write_file_from_stdin() {
   append_manifest "$path"
 }
 
+merge_config_defaults() {
+  local existing="$1"
+  local defaults="$2"
+  [ -r "$existing" ] || die "Existing config is not readable: $existing"
+  [ -r "$defaults" ] || die "Default config is not readable: $defaults"
+
+  # Keep every existing line and append only assignments for keys that are
+  # absent. This preserves device-specific values and secrets on upgrades while
+  # allowing new optional settings to appear with safe defaults.
+  awk '
+    NR == FNR {
+      print
+      line = $0
+      if (line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=/) {
+        sub(/^[[:space:]]*/, "", line)
+        key = line
+        sub(/=.*/, "", key)
+        present[key] = 1
+      }
+      next
+    }
+    {
+      line = $0
+      if (line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=/) {
+        sub(/^[[:space:]]*/, "", line)
+        key = line
+        sub(/=.*/, "", key)
+        if (!(key in present))
+          print
+      }
+    }
+  ' "$existing" "$defaults"
+}
+
 service_unit_path() {
   printf '/etc/systemd/system/%s\n' "$1"
 }
