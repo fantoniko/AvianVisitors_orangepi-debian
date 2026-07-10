@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import urllib.error
-import urllib.parse
 import urllib.request
 
 
@@ -35,12 +34,16 @@ def publish(image, content_type, *, timeout=45):
     if not token:
         raise PocketFramePublishError("POCKETFRAME_TOKEN is not set")
 
-    endpoint = server_url.rstrip("/") + "/api/frame?" + urllib.parse.urlencode({"token": token})
+    endpoint = server_url.rstrip("/") + "/api/frame"
     request = urllib.request.Request(
         endpoint,
         data=image,
         method="POST",
-        headers={"Content-Type": content_type, "User-Agent": "AvianVisitors-PocketFrame/1.0"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": content_type,
+            "User-Agent": "AvianVisitors-PocketFrame/1.0",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:

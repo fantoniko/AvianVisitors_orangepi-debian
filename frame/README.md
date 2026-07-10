@@ -91,7 +91,7 @@ mkdir -p ~/.config
 umask 077
 cat > ~/.config/birdpocketframe.env <<'EOF'
 POCKETFRAME_SERVER_URL=http://192.168.1.8:8090
-POCKETFRAME_TOKEN=replace-with-your-token
+POCKETFRAME_TOKEN=replace-with-your-upload-token
 EOF
 chmod 600 ~/.config/birdpocketframe.env
 ```

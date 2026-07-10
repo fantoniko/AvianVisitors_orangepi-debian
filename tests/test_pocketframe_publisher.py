@@ -33,7 +33,8 @@ def test_publish_posts_raw_jpeg_and_returns_revision():
     request = open_request.call_args.args[0]
     assert request.data == b"raw-jpeg"
     assert request.get_header("Content-type") == "image/jpeg"
-    assert request.full_url == "http://192.168.1.8:8090/api/frame?token=secret"
+    assert request.get_header("Authorization") == "Bearer secret"
+    assert request.full_url == "http://192.168.1.8:8090/api/frame"
     assert fields["revision"] == "abc123"
 
 
