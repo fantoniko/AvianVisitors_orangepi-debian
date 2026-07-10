@@ -90,8 +90,8 @@ Create a user-only environment file (do not add it to git):
 mkdir -p ~/.config
 umask 077
 cat > ~/.config/birdpocketframe.env <<'EOF'
-POCKETFRAME_SERVER_URL=http://192.168.1.8:8090
-POCKETFRAME_TOKEN=replace-with-your-upload-token
+POCKETFRAME_BASE_URL=http://192.168.1.8:8090
+POCKETFRAME_UPLOAD_TOKEN=replace-with-your-upload-token
 EOF
 chmod 600 ~/.config/birdpocketframe.env
 ```
@@ -103,6 +103,24 @@ rendering configuration:
 cd ~/AvianVisitors/frame
 .venv/bin/python publish_pocketframe.py --config ~/.birdframe/config.toml
 ```
+
+The Docker publisher uses absolute UTC slots: default publication is at HH:00,
+the client can read from HH:05, and failures retry after 30, 60, and 120
+seconds without shifting the following hourly slot. Each upload carries
+publication_id and Idempotency-Key pocketframe-slot. For a ten-minute test use
+POCKETFRAME_SCHEDULE_PERIOD_SECONDS=600 and POCKETFRAME_READ_DELAY_SECONDS=60.
+
+The Docker/Portainer configuration uses POCKETFRAME_BASE_URL,
+POCKETFRAME_UPLOAD_TOKEN, POCKETFRAME_SCHEDULE_PERIOD_SECONDS,
+POCKETFRAME_PUBLISH_OFFSET_SECONDS, POCKETFRAME_READ_DELAY_SECONDS, and
+POCKETFRAME_UPLOAD_TIMEOUT_SECONDS. The publisher sends POST /api/frame with
+Authorization: Bearer, Content-Type, a publication slot, and a stable
+Idempotency-Key. A successful POST records the slot in a persistent volume;
+restart cannot republish it. The expected sequence is: HH:00 POST, HH:05
+PocketFrame client manifest read, then the next HH:00 slot. The upload contract
+can be tested with curl -X POST --data-binary @frame.jpg -H
+Content-Type:image/jpeg -H Authorization:Bearer-upload-token
+http://pocketframe-server:8080/api/frame.
 
 To run it every 15 minutes, install the accompanying user-specific unit paths
 and enable its timer. The `sed` substitution is the same convention used by

@@ -19,7 +19,7 @@ def _response_fields(body):
     return fields
 
 
-def publish(image, content_type, *, timeout=45):
+def publish(image, content_type, *, timeout=45, publication=None):
     """POST image bytes as a raw body and return the PocketFrame response fields.
 
     Credentials intentionally come only from the environment by default, so a
@@ -27,23 +27,26 @@ def publish(image, content_type, *, timeout=45):
     """
     if content_type not in {"image/jpeg", "image/png", "image/gif"}:
         raise PocketFramePublishError(f"unsupported image content type: {content_type}")
-    server_url = os.environ.get("POCKETFRAME_SERVER_URL")
-    token = os.environ.get("POCKETFRAME_TOKEN")
+    server_url = os.environ.get("POCKETFRAME_BASE_URL") or os.environ.get("POCKETFRAME_SERVER_URL")
+    token = os.environ.get("POCKETFRAME_UPLOAD_TOKEN") or os.environ.get("POCKETFRAME_TOKEN")
     if not server_url:
-        raise PocketFramePublishError("POCKETFRAME_SERVER_URL is not set")
+        raise PocketFramePublishError("POCKETFRAME_BASE_URL is not set")
     if not token:
-        raise PocketFramePublishError("POCKETFRAME_TOKEN is not set")
+        raise PocketFramePublishError("POCKETFRAME_UPLOAD_TOKEN is not set")
 
     endpoint = server_url.rstrip("/") + "/api/frame"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": content_type,
+        "User-Agent": "AvianVisitors-PocketFrame/1.0",
+    }
+    if publication:
+        headers.update(publication.headers())
     request = urllib.request.Request(
         endpoint,
         data=image,
         method="POST",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": content_type,
-            "User-Agent": "AvianVisitors-PocketFrame/1.0",
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -51,13 +54,13 @@ def publish(image, content_type, *, timeout=45):
             body = response.read()
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
-        raise PocketFramePublishError(f"PocketFrame returned HTTP {error.code}: {body}") from error
+        raise PocketFramePublishError(f"PocketFrame returned HTTP {error.code}: {body.replace(token, '[redacted]')}") from error
     except urllib.error.URLError as error:
-        raise PocketFramePublishError(f"could not reach PocketFrame: {error.reason}") from error
+        raise PocketFramePublishError(f"could not reach PocketFrame: {str(error.reason).replace(token, '[redacted]')}") from error
 
     if status != 201:
         text = body.decode("utf-8", errors="replace")
-        raise PocketFramePublishError(f"PocketFrame returned HTTP {status}: {text}")
+        raise PocketFramePublishError(f"PocketFrame returned HTTP {status}: {text.replace(token, '[redacted]')}")
 
     fields = _response_fields(body)
     if not fields.get("revision"):

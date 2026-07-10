@@ -53,3 +53,14 @@ def test_publish_reports_http_error_body():
          patch("frame.pocketframe.urllib.request.urlopen", side_effect=error):
         with pytest.raises(PocketFramePublishError, match="HTTP 403: invalid token"):
             publish(b"image", "image/png")
+
+
+def test_publish_redacts_upload_token_from_errors():
+    token = "never-log-this-token"
+    error = urllib.error.HTTPError("http://server", 403, "forbidden", {}, None)
+    error.read = lambda: f"invalid {token}".encode()
+    with patch.dict("os.environ", {"POCKETFRAME_BASE_URL": "http://server", "POCKETFRAME_UPLOAD_TOKEN": token}), \
+         patch("frame.pocketframe.urllib.request.urlopen", side_effect=error):
+        with pytest.raises(PocketFramePublishError) as raised:
+            publish(b"image", "image/png")
+    assert token not in str(raised.value)
