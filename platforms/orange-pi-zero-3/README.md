@@ -119,10 +119,20 @@ reduction before recognition without comparing its false positives and missed
 calls against raw recordings.
 
 The extracted clips served by the web interface are a separate output. They
-use `PLAYBACK_HIGHPASS_HZ=100` and `PLAYBACK_LOWPASS_HZ=16000` by default. For
-strong, stable background noise, create a SoX profile from a quiet recording
-and set its absolute path in `PLAYBACK_DENOISE_PROFILE`; `PLAYBACK_DENOISE_AMOUNT`
-defaults to the deliberately gentle value `0.21`.
+use `PLAYBACK_HIGHPASS_HZ=100`, `PLAYBACK_LOWPASS_HZ=16000`, and narrow SoX
+band-reject filters at 50, 150, and 250 Hz by default. The notches target the
+measured mains hum without discarding the whole low-frequency range:
+
+```ini
+PLAYBACK_NOTCH_HZ=50,150,250
+PLAYBACK_NOTCH_Q=20
+```
+
+Use `60,180,300` on a 60 Hz electrical grid, or leave `PLAYBACK_NOTCH_HZ`
+empty to disable the notches. For strong broadband background noise, create a
+SoX profile from a quiet recording and set its absolute path in
+`PLAYBACK_DENOISE_PROFILE`; `PLAYBACK_DENOISE_AMOUNT` defaults to the
+deliberately gentle value `0.21`.
 
 ## Service checks
 

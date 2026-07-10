@@ -230,9 +230,12 @@ ANALYSIS_LOWPASS_HZ=0
 ## PLAYBACK_* settings affect the extracted clip served by the web interface,
 ## not the model input. PLAYBACK_DENOISE_PROFILE is an optional SoX .prof file
 ## created from a quiet recording; 0.21 is a deliberately gentle reduction.
+## The default narrow notches target 50 Hz mains hum and its measured harmonics.
 
 PLAYBACK_HIGHPASS_HZ=100
 PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_NOTCH_HZ=50,150,250
+PLAYBACK_NOTCH_Q=20
 PLAYBACK_DENOISE_PROFILE=
 PLAYBACK_DENOISE_AMOUNT=0.21
 

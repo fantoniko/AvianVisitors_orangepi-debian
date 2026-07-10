@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import io
 import soundfile
+from configparser import Error as ConfigError
 from time import sleep
 
 import requests
@@ -21,9 +22,32 @@ log = logging.getLogger(__name__)
 
 def _config_float(conf, key, default=0.0):
     try:
-        return conf.getfloat(key)
-    except (KeyError, ValueError):
+        value = conf.getfloat(key)
+        return default if value is None else value
+    except (ConfigError, KeyError, ValueError):
         return default
+
+
+def _config_frequencies(conf, key):
+    """Read a comma/space-separated list of positive frequencies."""
+    try:
+        raw = conf.get(key, '')
+    except (ConfigError, KeyError, TypeError):
+        return []
+
+    frequencies = []
+    for value in raw.replace(',', ' ').split():
+        try:
+            frequency = float(value)
+        except ValueError:
+            log.warning('Ignoring invalid %s frequency: %s', key, value)
+            continue
+        if frequency <= 0:
+            log.warning('Ignoring non-positive %s frequency: %s', key, value)
+            continue
+        if frequency not in frequencies:
+            frequencies.append(frequency)
+    return frequencies
 
 
 def playback_effects(conf):
@@ -31,11 +55,19 @@ def playback_effects(conf):
     effects = []
     highpass_hz = _config_float(conf, 'PLAYBACK_HIGHPASS_HZ')
     lowpass_hz = _config_float(conf, 'PLAYBACK_LOWPASS_HZ')
+    notch_frequencies = _config_frequencies(conf, 'PLAYBACK_NOTCH_HZ')
+    notch_q = _config_float(conf, 'PLAYBACK_NOTCH_Q', 20.0)
     denoise_profile = conf.get('PLAYBACK_DENOISE_PROFILE', '').strip()
     denoise_amount = _config_float(conf, 'PLAYBACK_DENOISE_AMOUNT', 0.21)
 
     if highpass_hz > 0:
         effects += ['highpass', str(highpass_hz)]
+    if notch_frequencies:
+        if notch_q <= 0:
+            log.warning('PLAYBACK_NOTCH_Q must be positive; using 20')
+            notch_q = 20.0
+        for frequency in notch_frequencies:
+            effects += ['bandreject', f'{frequency:g}', f'{notch_q:g}q']
     if lowpass_hz > 0:
         effects += ['lowpass', str(lowpass_hz)]
     if denoise_profile:

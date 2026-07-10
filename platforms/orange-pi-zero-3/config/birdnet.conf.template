@@ -68,9 +68,12 @@ CHANNELS=2
 ANALYSIS_HIGHPASS_HZ=0
 ANALYSIS_LOWPASS_HZ=0
 # These filters affect the extracted clip heard in the web interface, not the
-# model input. Set PLAYBACK_DENOISE_PROFILE to a SoX .prof profile if needed.
+# model input. The narrow notches remove the measured 50 Hz mains hum and its
+# strongest harmonics while preserving nearby bird calls.
 PLAYBACK_HIGHPASS_HZ=100
 PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_NOTCH_HZ=50,150,250
+PLAYBACK_NOTCH_Q=20
 PLAYBACK_DENOISE_PROFILE=
 PLAYBACK_DENOISE_AMOUNT=0.21
 PRIVACY_THRESHOLD=0
