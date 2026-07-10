@@ -80,8 +80,9 @@ It generates only the species you're missing; `--country` and `--sample` carry t
 ## Publish to PocketFrame
 
 The same rendered collage can be sent to a local PocketFrame server. The
-publisher posts a raw JPEG body, checks for `201 Created`, and logs the server
-revision. It never reads a token from config or source code.
+publisher posts the full 3:4 collage (without the physical frame's A5 mat),
+checks for `201 Created`, and logs the server revision. It never reads a token
+from config or source code.
 
 Create a user-only environment file (do not add it to git):
 

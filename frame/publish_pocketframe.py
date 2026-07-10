@@ -32,16 +32,17 @@ def image_file_payload(path):
 
 
 def rendered_payload(config_path=None, base_url=None):
-    # Keep the composition consistent with the optional Inky frame, but leave
-    # grayscale conversion and exact 1404x1872 sizing to PocketFrame as its API
-    # specifies.
-    from display import fit_panel, load_config, mat_and_center, obtain_image
+    # Do not apply display.py's A5 mat: it is sized for the physical Inky frame
+    # and would waste about half of a PocketBook screen. The screenshot is
+    # already 1200x1600 (3:4), the exact aspect ratio of PocketFrame's
+    # 1404x1872 target, so the server can scale it edge-to-edge.
+    from display import load_config, obtain_image
 
     cfg = load_config(config_path)
     if base_url:
         cfg["base_url"] = base_url
         cfg["shoot"] = True
-    image = mat_and_center(fit_panel(obtain_image(cfg)), cfg["mat"])
+    image = obtain_image(cfg)
     buf = io.BytesIO()
     image.save(buf, format="JPEG", quality=95, optimize=True)
     return buf.getvalue(), "image/jpeg"

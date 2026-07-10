@@ -100,9 +100,10 @@ id -g
 
 Set `COMPOSE_PROFILES=pocketframe` and the two `POCKETFRAME_*` variables above
 to enable the optional publisher. It screenshots the live collage every
-`AV_POCKETFRAME_INTERVAL_SECONDS`, posts the image as a raw JPEG body, and logs
-the returned revision. Keep `POCKETFRAME_TOKEN` in Portainer's environment
-variables only; it is never written to the repository or application volume.
+`AV_POCKETFRAME_INTERVAL_SECONDS`, posts the full 3:4 image as a raw JPEG body,
+and logs the returned revision. Keep `POCKETFRAME_TOKEN` in Portainer's
+environment variables only; it is never written to the repository or
+application volume.
 
 ## Local compose
 
