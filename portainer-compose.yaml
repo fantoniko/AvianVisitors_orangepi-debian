@@ -96,25 +96,6 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  avian-pocketframe:
-    profiles: ["pocketframe"]
-    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-pocketframe:${AV_IMAGE_TAG:-web-deploy}
-    depends_on:
-      - avian-web
-    environment:
-      AV_POCKETFRAME_SOURCE_URL: ${AV_POCKETFRAME_SOURCE_URL:-http://avian-web:8080}
-      POCKETFRAME_BASE_URL: ${POCKETFRAME_BASE_URL:-}
-      POCKETFRAME_UPLOAD_TOKEN: ${POCKETFRAME_UPLOAD_TOKEN:-}
-      POCKETFRAME_SCHEDULE_PERIOD_SECONDS: ${POCKETFRAME_SCHEDULE_PERIOD_SECONDS:-3600}
-      POCKETFRAME_PUBLISH_OFFSET_SECONDS: ${POCKETFRAME_PUBLISH_OFFSET_SECONDS:-0}
-      POCKETFRAME_READ_DELAY_SECONDS: ${POCKETFRAME_READ_DELAY_SECONDS:-300}
-      POCKETFRAME_UPLOAD_TIMEOUT_SECONDS: ${POCKETFRAME_UPLOAD_TIMEOUT_SECONDS:-60}
-      POCKETFRAME_STATE_PATH: /var/lib/avian-pocketframe/state.json
-      TZ: ${TZ:-Europe/Moscow}
-    volumes:
-      - avian-pocketframe-state:/var/lib/avian-pocketframe
-    restart: unless-stopped
-
 volumes:
   avian-app:
   avian-illustrations:
@@ -126,5 +107,3 @@ volumes:
   avian-runtime:
     name: ${AV_RUNTIME_VOLUME_NAME:-avian-visitors-runtime}
   avian-u2net:
-  avian-pocketframe-state:
-    name: ${AV_POCKETFRAME_STATE_VOLUME_NAME:-avian-visitors-pocketframe-state}

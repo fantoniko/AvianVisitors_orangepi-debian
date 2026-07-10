@@ -53,12 +53,6 @@ state = "~/.birdframe/state.json"
 cache = "~/.birdframe"
 timeout = 45
 
-# --- Optional PocketFrame publisher ----------------------------------------
-# `publish_pocketframe.py --config ~/.birdframe/config.toml` renders the same
-# collage and posts it to a PocketFrame server. The server address and token
-# are deliberately *not* kept here: set POCKETFRAME_SERVER_URL and
-# POCKETFRAME_TOKEN in the service environment file described in frame/README.
-
 # --- Only if your WHOLE site is behind basic-auth ---------------------------
 # The AvianVisitors default leaves the collage and detection API public, so
 # usually leave these out.

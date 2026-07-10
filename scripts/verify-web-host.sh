@@ -12,7 +12,6 @@ set -uo pipefail
 
 WEB_URL="http://127.0.0.1:8080"
 COMPOSE_PROJECT="avian-visitors"
-CHECK_POCKETFRAME=0
 
 ###############################################################################
 
@@ -61,22 +60,6 @@ healthy_service() {
   state=$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")
   if [ "$state" = "running healthy" ]; then
     ok "Docker service $service is running and healthy"
-  else
-    bad "Docker service $service status is $state"
-    docker logs --tail 30 "$id" 2>&1 | sed 's/^/           /'
-  fi
-}
-
-running_service() {
-  local service="$1" id state
-  id=$(service_id "$service")
-  if [ -z "$id" ]; then
-    bad "Docker service $service exists in project $COMPOSE_PROJECT"
-    return
-  fi
-  state=$(docker inspect -f '{{.State.Status}}' "$id")
-  if [ "$state" = "running" ]; then
-    ok "Docker service $service is running"
   else
     bad "Docker service $service status is $state"
     docker logs --tail 30 "$id" 2>&1 | sed 's/^/           /'
@@ -140,11 +123,6 @@ else
   healthy_service avian-php
   healthy_service avian-worker
   worker_api
-  if [ "$CHECK_POCKETFRAME" = 1 ]; then
-    running_service avian-pocketframe
-  else
-    skip "PocketFrame is disabled (set CHECK_POCKETFRAME=1 when enabled)"
-  fi
 fi
 
 echo

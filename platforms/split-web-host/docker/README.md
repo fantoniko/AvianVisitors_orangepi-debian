@@ -76,15 +76,6 @@ AV_ONNX_THREADS=2
 MALLOC_ARENA_MAX=2
 AV_HOST_UID=1000
 AV_HOST_GID=1000
-COMPOSE_PROFILES=pocketframe
-POCKETFRAME_BASE_URL=http://192.168.1.8:8090
-POCKETFRAME_UPLOAD_TOKEN=your-upload-token
-AV_POCKETFRAME_SOURCE_URL=http://avian-web:8080
-POCKETFRAME_SCHEDULE_PERIOD_SECONDS=3600
-POCKETFRAME_PUBLISH_OFFSET_SECONDS=0
-POCKETFRAME_READ_DELAY_SECONDS=300
-POCKETFRAME_UPLOAD_TIMEOUT_SECONDS=60
-AV_POCKETFRAME_TIMEOUT_SECONDS=45
 AV_ILLUSTRATIONS_VOLUME_NAME=avian-visitors-illustrations
 AV_REFERENCES_VOLUME_NAME=avian-visitors-references
 AV_CUTOUTS_VOLUME_NAME=avian-visitors-cutouts
@@ -98,15 +89,6 @@ Docker host. On the host:
 id -u
 id -g
 ```
-
-### PocketFrame
-
-Set `COMPOSE_PROFILES=pocketframe` and the two `POCKETFRAME_*` variables above
-to enable the optional publisher. It screenshots the live collage every
-`AV_POCKETFRAME_INTERVAL_SECONDS`, posts the full 3:4 image as a raw JPEG body,
-and logs the returned revision. Keep `POCKETFRAME_TOKEN` in Portainer's
-environment variables only; it is never written to the repository or
-application volume.
 
 ## Local compose
 
