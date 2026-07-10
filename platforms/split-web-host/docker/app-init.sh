@@ -38,4 +38,5 @@ copy_dir /srv/app/avian/runtime /srv/generated/runtime
 clear_app_volume
 cp -a /image-app/. /srv/app/
 
-printf 'avian app volume refreshed; generated assets remain in dedicated volumes\n'
+commit="$(tr -d '\r\n' < /image-app/SOURCE_COMMIT 2>/dev/null || printf 'unknown')"
+printf 'avian app volume refreshed; source_commit=%s; generated assets remain in dedicated volumes\n' "$commit"

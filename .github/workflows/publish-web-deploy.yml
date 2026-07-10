@@ -41,6 +41,8 @@ jobs:
         with:
           context: .
           file: platforms/split-web-host/docker/app.Dockerfile
+          build-args: |
+            SOURCE_COMMIT=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
