@@ -3,6 +3,7 @@ librosa
 pytz
 tzlocal
 numpy
+scipy
 pandas
 seaborn
 streamlit==1.44.0

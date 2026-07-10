@@ -19,8 +19,39 @@ from .notifications import sendAppriseNotifications
 log = logging.getLogger(__name__)
 
 
-def extract(in_file, out_file, start, stop):
-    result = subprocess.run(['sox', '-V1', f'{in_file}', f'{out_file}', 'trim', f'={start}', f'={stop}'],
+def _config_float(conf, key, default=0.0):
+    try:
+        return conf.getfloat(key)
+    except (KeyError, ValueError):
+        return default
+
+
+def playback_effects(conf):
+    """Build optional SoX effects for the clip served by the web player."""
+    effects = []
+    highpass_hz = _config_float(conf, 'PLAYBACK_HIGHPASS_HZ')
+    lowpass_hz = _config_float(conf, 'PLAYBACK_LOWPASS_HZ')
+    denoise_profile = conf.get('PLAYBACK_DENOISE_PROFILE', '').strip()
+    denoise_amount = _config_float(conf, 'PLAYBACK_DENOISE_AMOUNT', 0.21)
+
+    if highpass_hz > 0:
+        effects += ['highpass', str(highpass_hz)]
+    if lowpass_hz > 0:
+        effects += ['lowpass', str(lowpass_hz)]
+    if denoise_profile:
+        if os.path.isfile(os.path.expanduser(denoise_profile)):
+            # SoX accepts 0.01--1.0; values near 0.2 are deliberately gentle.
+            effects += ['noisered', os.path.expanduser(denoise_profile), str(min(1.0, max(0.01, denoise_amount)))]
+        else:
+            log.warning('PLAYBACK_DENOISE_PROFILE does not exist: %s; skipping noise reduction', denoise_profile)
+    return effects
+
+
+def extract(in_file, out_file, start, stop, effects=None):
+    args = ['sox', '-V1', f'{in_file}', f'{out_file}', 'trim', f'={start}', f'={stop}']
+    if effects:
+        args.extend(effects)
+    result = subprocess.run(args,
                             check=True, capture_output=True)
     ret = result.stdout.decode('utf-8')
     err = result.stderr.decode('utf-8')
@@ -43,7 +74,7 @@ def extract_safe(in_file, out_file, start, stop):
     safe_start = max(0, start - spacer)
     safe_stop = min(conf.getint('RECORDING_LENGTH'), stop + spacer)
 
-    extract(in_file, out_file, safe_start, safe_stop)
+    extract(in_file, out_file, safe_start, safe_stop, playback_effects(conf))
 
 
 def spectrogram(in_file, title, comment, raw=0):

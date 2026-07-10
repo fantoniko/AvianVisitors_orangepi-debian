@@ -62,6 +62,17 @@ FREQSHIFT_PITCH=-1500
 ACTIVATE_FREQSHIFT_IN_LIVESTREAM=false
 
 CHANNELS=2
+# Optional light pre-filter applied only in memory before BirdNET inference.
+# Keep 0 to disable either bound. A useful starting point for wind/rumble is
+# 150--250 Hz high-pass; do not use aggressive denoising before recognition.
+ANALYSIS_HIGHPASS_HZ=0
+ANALYSIS_LOWPASS_HZ=0
+# These filters affect the extracted clip heard in the web interface, not the
+# model input. Set PLAYBACK_DENOISE_PROFILE to a SoX .prof profile if needed.
+PLAYBACK_HIGHPASS_HZ=100
+PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_DENOISE_PROFILE=
+PLAYBACK_DENOISE_AMOUNT=0.21
 PRIVACY_THRESHOLD=0
 RECORDING_LENGTH=15
 EXTRACTION_LENGTH=

@@ -102,6 +102,28 @@ bash platforms/orange-pi-zero-3/test-audio.sh
 The script records a short WAV through ALSA and validates it with `ffprobe` or
 `soxi` when available.
 
+## Noise filtering
+
+The original WAV is retained unchanged while it is analysed.  Optional settings
+in `/etc/birdnet/birdnet.conf` apply a light, zero-phase high/low-pass filter
+only in memory before BirdNET inference:
+
+```ini
+# Start with this only for wind or low-frequency electrical rumble.
+ANALYSIS_HIGHPASS_HZ=180
+ANALYSIS_LOWPASS_HZ=0
+```
+
+Leave either value at `0` to disable that cutoff. Do not use aggressive noise
+reduction before recognition without comparing its false positives and missed
+calls against raw recordings.
+
+The extracted clips served by the web interface are a separate output. They
+use `PLAYBACK_HIGHPASS_HZ=100` and `PLAYBACK_LOWPASS_HZ=16000` by default. For
+strong, stable background noise, create a SoX profile from a quiet recording
+and set its absolute path in `PLAYBACK_DENOISE_PROFILE`; `PLAYBACK_DENOISE_AMOUNT`
+defaults to the deliberately gentle value `0.21`.
+
 ## Service checks
 
 ```bash

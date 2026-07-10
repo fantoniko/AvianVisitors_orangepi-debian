@@ -219,6 +219,23 @@ FREQSHIFT_PITCH=-1500
 
 CHANNELS=2
 
+## ANALYSIS_HIGHPASS_HZ and ANALYSIS_LOWPASS_HZ optionally apply a light
+## zero-phase filter in memory before BirdNET inference. Keep a bound at 0 to
+## disable it. Start with a 150-250 Hz high-pass only for wind or electrical
+## rumble; do not use aggressive noise reduction before recognition.
+
+ANALYSIS_HIGHPASS_HZ=0
+ANALYSIS_LOWPASS_HZ=0
+
+## PLAYBACK_* settings affect the extracted clip served by the web interface,
+## not the model input. PLAYBACK_DENOISE_PROFILE is an optional SoX .prof file
+## created from a quiet recording; 0.21 is a deliberately gentle reduction.
+
+PLAYBACK_HIGHPASS_HZ=100
+PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_DENOISE_PROFILE=
+PLAYBACK_DENOISE_AMOUNT=0.21
+
 ## PRIVACY_THRESHOLD can be set to enable sensitivity to Human sounds. This
 ## setting is an effort to introduce privacy into the data collection.
 ## The PRIVACY_THRESHOLD value represents a percentage of the entire species

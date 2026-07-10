@@ -2,7 +2,9 @@ import os
 import unittest
 from unittest.mock import patch
 
-from scripts.utils.analysis import run_analysis
+import numpy as np
+
+from scripts.utils.analysis import apply_analysis_filter, run_analysis
 from scripts.utils.classes import ParseFileName
 from tests.helpers import TESTDATA, Settings
 from scripts.utils.analysis import filter_humans
@@ -71,6 +73,7 @@ class TestFilterHumans(unittest.TestCase):
 
         # Assertions
         self.assertEqual(result, expected)
+
 
     @patch('scripts.utils.helpers._load_settings')
     def test_filter_empty(self, mock_load_settings):
@@ -193,6 +196,28 @@ class TestFilterHumans(unittest.TestCase):
 
         # Assertions
         self.assertEqual(result, expected)
+
+
+class TestAnalysisAudioFilter(unittest.TestCase):
+
+    def test_highpass_reduces_low_frequency_rumble(self):
+        rate = 48000
+        seconds = 1
+        samples = np.arange(rate * seconds) / rate
+        rumble = np.sin(2 * np.pi * 50 * samples)
+        bird_band = 0.25 * np.sin(2 * np.pi * 3000 * samples)
+        filtered = apply_analysis_filter((rumble + bird_band).astype(np.float32), rate, highpass_hz=250)
+
+        spectrum = np.abs(np.fft.rfft(filtered))
+        freqs = np.fft.rfftfreq(filtered.size, 1 / rate)
+        low = spectrum[np.argmin(np.abs(freqs - 50))]
+        bird = spectrum[np.argmin(np.abs(freqs - 3000))]
+        self.assertGreater(bird, low * 10)
+
+    def test_invalid_band_keeps_original_audio(self):
+        signal = np.linspace(-1, 1, 1000, dtype=np.float32)
+        filtered = apply_analysis_filter(signal, 48000, highpass_hz=16000, lowpass_hz=1000)
+        np.testing.assert_array_equal(filtered, signal)
 
 
 if __name__ == '__main__':

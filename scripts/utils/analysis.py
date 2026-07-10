@@ -4,6 +4,7 @@ import time
 
 import librosa
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 
 from .classes import Detection, ParseFileName
 from .helpers import get_settings, get_language
@@ -12,6 +13,56 @@ from .models import get_model
 log = logging.getLogger(__name__)
 
 MODEL = None
+
+
+def _config_float(conf, key, default=0.0):
+    """Read an optional numeric setting without breaking older config files."""
+    try:
+        return conf.getfloat(key)
+    except (KeyError, ValueError):
+        return default
+
+
+def apply_analysis_filter(sig, rate, highpass_hz=0.0, lowpass_hz=0.0):
+    """Apply an optional, zero-phase band-pass filter before BirdNET inference.
+
+    The recording on disk is never changed.  Keeping this operation in memory
+    makes it possible to remove low-frequency rumble and high-frequency hiss
+    without losing the original WAV used for evidence and playback extraction.
+    """
+    highpass_hz = float(highpass_hz)
+    lowpass_hz = float(lowpass_hz)
+    nyquist = rate / 2.0
+
+    if highpass_hz <= 0 and lowpass_hz <= 0:
+        return sig
+    if highpass_hz < 0 or lowpass_hz < 0:
+        log.warning('Analysis filter frequencies must be non-negative; skipping filter')
+        return sig
+    if highpass_hz >= nyquist or (lowpass_hz and lowpass_hz >= nyquist):
+        log.warning('Analysis filter frequency must be below %.0f Hz; skipping filter', nyquist)
+        return sig
+    if highpass_hz and lowpass_hz and highpass_hz >= lowpass_hz:
+        log.warning('ANALYSIS_HIGHPASS_HZ must be lower than ANALYSIS_LOWPASS_HZ; skipping filter')
+        return sig
+
+    if highpass_hz and lowpass_hz:
+        filter_type = 'bandpass'
+        cutoff = [highpass_hz, lowpass_hz]
+    elif highpass_hz:
+        filter_type = 'highpass'
+        cutoff = highpass_hz
+    else:
+        filter_type = 'lowpass'
+        cutoff = lowpass_hz
+
+    try:
+        sos = butter(4, cutoff, btype=filter_type, fs=rate, output='sos')
+        return sosfiltfilt(sos, sig).astype(sig.dtype, copy=False)
+    except ValueError as exc:
+        # Do not allow a malformed optional filter setting to stop detection.
+        log.warning('Unable to apply analysis filter: %s', exc)
+        return sig
 
 
 def loadCustomSpeciesList(path):
@@ -49,6 +100,13 @@ def readAudioData(path, overlap, sample_rate, chunk_duration):
 
     # Open file with librosa (uses ffmpeg or libav)
     sig, rate = librosa.load(path, sr=sample_rate, mono=True, res_type='kaiser_fast')
+
+    conf = get_settings()
+    highpass_hz = _config_float(conf, 'ANALYSIS_HIGHPASS_HZ')
+    lowpass_hz = _config_float(conf, 'ANALYSIS_LOWPASS_HZ')
+    if highpass_hz or lowpass_hz:
+        log.info('Applying analysis filter: high-pass=%s Hz, low-pass=%s Hz', highpass_hz, lowpass_hz)
+        sig = apply_analysis_filter(sig, rate, highpass_hz, lowpass_hz)
 
     # Split audio into chunks
     chunks = splitSignal(sig, rate, overlap, seconds=chunk_duration)
