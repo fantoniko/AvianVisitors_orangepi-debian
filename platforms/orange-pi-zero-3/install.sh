@@ -231,16 +231,20 @@ copy_project() {
       fi
     fi
     install -d -m 0755 -o "$APP_USER" -g "$APP_USER" "$PREFIX"
-    # Deploy tracked files from Git when possible. This excludes .git, local
-    # edits, caches, and a source-tree venv. Extract as the service user so an
-    # update does not need to recursively chown the installed venv.
-    if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      git -C "$REPO_ROOT" archive --format=tar HEAD |
-        runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -
-    else
-      tar --exclude='.git' -C "$REPO_ROOT" -cf - . |
-        runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -
-    fi
+    # Copy the checked-out working tree without reading Git's object database.
+    # `git archive` may fetch every missing blob in a partial clone, turning a
+    # small update into a large network download. Exclude local environments
+    # and caches, then extract as the service user so the installed venv is not
+    # recursively chowned or copied.
+    tar \
+      --exclude='.git' \
+      --exclude='./birdnet' \
+      --exclude='./.venv' \
+      --exclude='./venv' \
+      --exclude='__pycache__' \
+      --exclude='*.pyc' \
+      -C "$REPO_ROOT" -cf - . |
+      runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -
     : > "$PREFIX/$AV_PREFIX_MARKER"
     chown "$APP_USER:$APP_USER" "$PREFIX/$AV_PREFIX_MARKER"
   fi
@@ -288,7 +292,7 @@ configure_python() {
       "$PREFIX/requirements.txt" > "$offline_requirements"
     chown "$APP_USER:$APP_USER" "$offline_requirements"
     if runuser -u "$APP_USER" -- env HOME="$APP_HOME" \
-      "$venv_pip" install --disable-pip-version-check --no-index -r "$offline_requirements"; then
+      "$venv_pip" install --quiet --disable-pip-version-check --no-index -r "$offline_requirements"; then
       log_info "existing Python environment satisfies requirements; recording fingerprint"
       printf '%s\n' "$desired_fingerprint" > "$stamp_file"
       chown "$APP_USER:$APP_USER" "$stamp_file"
@@ -543,4 +547,8 @@ else
 fi
 log_info "manifest: ${MANIFEST_FILE:-dry-run}"
 log_info "backup root: ${BACKUP_ROOT:-dry-run}"
-log_info "edit /etc/birdnet/birdnet.conf to set REC_CARD, LATITUDE, and LONGITUDE before starting services"
+if [ "$UPDATE_MODE" = "1" ]; then
+  log_info "preserved configuration: /etc/birdnet/birdnet.conf"
+else
+  log_info "edit /etc/birdnet/birdnet.conf to set REC_CARD, LATITUDE, and LONGITUDE before starting services"
+fi

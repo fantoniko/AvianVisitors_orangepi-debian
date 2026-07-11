@@ -30,7 +30,9 @@ def test_unchanged_python_dependencies_do_not_use_network():
 
 
 def test_update_copy_does_not_recursively_chown_venv():
-    assert 'git -C "$REPO_ROOT" archive --format=tar HEAD' in INSTALL
+    assert 'git -C "$REPO_ROOT" archive' not in INSTALL
+    assert "--exclude='./birdnet'" in INSTALL
+    assert "--exclude='./.venv'" in INSTALL
     assert 'runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -' in INSTALL
     assert 'chown -R "$APP_USER:$APP_USER" "$PREFIX"' not in INSTALL
 
