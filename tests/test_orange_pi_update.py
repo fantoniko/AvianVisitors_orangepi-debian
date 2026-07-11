@@ -14,7 +14,9 @@ def test_update_mode_is_available_through_deploy_wrapper():
     assert '--update)' in INSTALL
     assert 'RUN_PREFLIGHT=0' in INSTALL
     assert 'systemctl restart birdnet-recording.service' in INSTALL
-    assert 'orange-pi --update "$@"' in UPDATE
+    assert 'exec bash "$SCRIPT_DIR/install.sh"' in UPDATE
+    assert '--web-bind 0.0.0.0:8079' in UPDATE
+    assert '--allow-external-web-bind' in UPDATE
 
 
 def test_unchanged_python_dependencies_do_not_use_network():
