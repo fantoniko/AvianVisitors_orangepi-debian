@@ -12,6 +12,8 @@ BIRDNET_API_BASE=""
 ORANGE_PI_HOST=""
 START_SERVICES=0
 ALLOW_DEFAULT_AUDIO=0
+UPDATE_MODE=0
+FORCE_PYTHON_DEPS=0
 WEB_ROOT=""
 ENABLE_IMAGE_WORKER=0
 IMAGE_WORKER_INTERVAL=""
@@ -29,6 +31,8 @@ Usage:
 Orange Pi options:
   --web-bind ADDR:PORT      API/Caddy bind (default: 0.0.0.0:8079)
   --start-services          Start BirdNET services after install
+  --update                  Fast update and service restart after git pull
+  --force-python-deps       Force Python dependency reinstallation
   --allow-default-audio     Permit starting services with REC_CARD=default
 
 Web host options:
@@ -52,6 +56,7 @@ Common options:
 
 Examples:
   sudo bash platforms/deploy.sh orange-pi
+  sudo bash platforms/deploy.sh orange-pi --update
   sudo bash platforms/deploy.sh web-host --orange-pi-host op3.lc
 EOF
 }
@@ -107,6 +112,8 @@ run_orange_pi() {
   [ "$DRY_RUN" = "1" ] && args+=(--dry-run)
   [ "$SKIP_PACKAGES" = "1" ] && args+=(--skip-packages)
   [ "$START_SERVICES" = "1" ] && args+=(--start-services)
+  [ "$UPDATE_MODE" = "1" ] && args+=(--update)
+  [ "$FORCE_PYTHON_DEPS" = "1" ] && args+=(--force-python-deps)
   [ "$ALLOW_DEFAULT_AUDIO" = "1" ] && args+=(--allow-default-audio)
 
   run bash "${args[@]}"
@@ -174,6 +181,8 @@ while [ "$#" -gt 0 ]; do
     --image-worker-size) IMAGE_WORKER_SIZE="${2:?missing value after --image-worker-size}"; shift 2 ;;
     --image-worker-cutout-model) IMAGE_WORKER_CUTOUT_MODEL="${2:?missing value after --image-worker-cutout-model}"; shift 2 ;;
     --start-services) START_SERVICES=1; shift ;;
+    --update) UPDATE_MODE=1; shift ;;
+    --force-python-deps) FORCE_PYTHON_DEPS=1; shift ;;
     --allow-default-audio) ALLOW_DEFAULT_AUDIO=1; shift ;;
     --skip-packages) SKIP_PACKAGES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;

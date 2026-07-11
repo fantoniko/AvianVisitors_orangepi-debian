@@ -74,6 +74,32 @@ sudo systemctl start birdnet-analysis.service
 sudo systemctl start spectrogram-viewer.service
 ```
 
+## Updates after `git pull`
+
+Run one command from the updated repository checkout:
+
+```bash
+sudo bash platforms/orange-pi-zero-3/update.sh
+```
+
+Update mode preserves `/etc/birdnet/birdnet.conf` values and the recordings
+database, copies the new application files, refreshes systemd and web-server
+configuration, and restarts the services. Installed Debian packages are only
+touched when a required package is missing.
+
+Python dependencies are fingerprinted from `requirements.txt`, the Python ABI,
+the CPU architecture, and the TensorFlow Lite wheel. When the fingerprint has
+not changed, venv and pip are skipped completely. A legacy installation without
+a fingerprint is validated with `pip --no-index` first, so an already complete
+environment can be adopted without internet access. The downloaded TensorFlow
+Lite wheel is cached under the install prefix and reused.
+
+Force dependency repair only when necessary:
+
+```bash
+sudo bash platforms/orange-pi-zero-3/update.sh --force-python-deps
+```
+
 The default web listener is local only:
 
 ```text

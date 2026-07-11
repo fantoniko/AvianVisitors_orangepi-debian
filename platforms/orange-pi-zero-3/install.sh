@@ -16,6 +16,8 @@ RUN_PREFLIGHT=1
 INSTALL_PACKAGES=1
 ALLOW_DEFAULT_AUDIO=0
 ALLOW_EXTERNAL_WEB_BIND=0
+UPDATE_MODE=0
+FORCE_PYTHON_DEPS=0
 
 usage() {
   cat <<'EOF'
@@ -29,6 +31,8 @@ Options:
   --web-bind ADDR:PORT      Caddy bind address (default: 127.0.0.1:8079).
   --allow-external-web-bind Permit --web-bind on a non-loopback address.
   --start-services          Start services after validation. Default only enables them.
+  --update                  Fast update: skip preflight, reuse dependencies, restart services.
+  --force-python-deps       Reinstall Python dependencies even if their fingerprint matches.
   --allow-default-audio     Permit starting services with REC_CARD=default.
   --skip-preflight          Do not run preflight.sh before installing.
   --skip-packages           Do not install missing apt packages.
@@ -48,6 +52,8 @@ while [ "$#" -gt 0 ]; do
     --web-bind) WEB_BIND="${2:?missing address after --web-bind}"; shift 2 ;;
     --allow-external-web-bind) ALLOW_EXTERNAL_WEB_BIND=1; shift ;;
     --start-services) START_SERVICES=1; shift ;;
+    --update) UPDATE_MODE=1; RUN_PREFLIGHT=0; START_SERVICES=1; shift ;;
+    --force-python-deps) FORCE_PYTHON_DEPS=1; shift ;;
     --allow-default-audio) ALLOW_DEFAULT_AUDIO=1; shift ;;
     --skip-preflight) RUN_PREFLIGHT=0; shift ;;
     --skip-packages) INSTALL_PACKAGES=0; shift ;;
@@ -225,30 +231,94 @@ copy_project() {
       fi
     fi
     install -d -m 0755 -o "$APP_USER" -g "$APP_USER" "$PREFIX"
-    tar --exclude='.git' -C "$REPO_ROOT" -cf - . | tar -C "$PREFIX" -xf -
+    # Deploy tracked files from Git when possible. This excludes .git, local
+    # edits, caches, and a source-tree venv. Extract as the service user so an
+    # update does not need to recursively chown the installed venv.
+    if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git -C "$REPO_ROOT" archive --format=tar HEAD |
+        runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -
+    else
+      tar --exclude='.git' -C "$REPO_ROOT" -cf - . |
+        runuser -u "$APP_USER" -- tar -C "$PREFIX" -xf -
+    fi
     : > "$PREFIX/$AV_PREFIX_MARKER"
-    chown -R "$APP_USER:$APP_USER" "$PREFIX"
+    chown "$APP_USER:$APP_USER" "$PREFIX/$AV_PREFIX_MARKER"
   fi
   append_manifest "$PREFIX"
   append_manifest "$PREFIX/$AV_PREFIX_MARKER"
 }
 
 configure_python() {
-  run_as_user "$APP_USER" env HOME="$APP_HOME" python3 -m venv "$PREFIX/birdnet"
-  run_as_user "$APP_USER" env HOME="$APP_HOME" "$PREFIX/birdnet/bin/pip3" install --upgrade pip wheel
-
-  local whl base_url
+  local whl base_url venv_python venv_pip stamp_file desired_fingerprint installed_fingerprint
+  local tflite_version offline_requirements
   whl="$TFLITE_WHL"
   base_url="https://github.com/Nachtzuster/BirdNET-Pi/releases/download/v0.1"
+  venv_python="$PREFIX/birdnet/bin/python"
+  venv_pip="$PREFIX/birdnet/bin/pip3"
+  stamp_file="$PREFIX/birdnet/.avian-python-dependencies.sha256"
+  tflite_version="${whl#tflite_runtime-}"
+  tflite_version="${tflite_version%%-*}"
+  offline_requirements="$PREFIX/requirements_offline.txt"
+
+  desired_fingerprint="$({
+    printf 'python=%s\n' "$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    printf 'arch=%s\n' "$(uname -m)"
+    printf 'tflite=%s\n' "$whl"
+    sha256sum "$PREFIX/requirements.txt"
+  } | sha256sum | awk '{print $1}')"
+  installed_fingerprint=""
+  [ -r "$stamp_file" ] && installed_fingerprint="$(cat "$stamp_file")"
+
+  if [ "$FORCE_PYTHON_DEPS" != "1" ] && [ -x "$venv_python" ] &&
+    [ "$installed_fingerprint" = "$desired_fingerprint" ]; then
+    log_info "Python dependencies unchanged; skipping venv and pip"
+    return 0
+  fi
 
   if [ "$DRY_RUN" = "1" ]; then
-    printf 'DRY-RUN: prepare requirements_custom.txt with %s\n' "$whl"
-  else
-    runuser -u "$APP_USER" -- env HOME="$APP_HOME" curl -L -o "$PREFIX/$whl" "$base_url/$whl"
-    sed "s|^tensorflow.*|$PREFIX/$whl|" "$PREFIX/requirements.txt" > "$PREFIX/requirements_custom.txt"
-    chown "$APP_USER:$APP_USER" "$PREFIX/requirements_custom.txt" "$PREFIX/$whl"
+    printf 'DRY-RUN: Python dependency fingerprint %s requires validation/install\n' "$desired_fingerprint"
+    return 0
   fi
-  run_as_user "$APP_USER" env HOME="$APP_HOME" "$PREFIX/birdnet/bin/pip3" install -r "$PREFIX/requirements_custom.txt"
+
+  # Adopt a complete legacy venv before checking the wheel cache. Replacing the
+  # source-only "tensorflow" placeholder with the installed distribution name
+  # lets pip verify the full environment without an index or any downloads.
+  if [ "$FORCE_PYTHON_DEPS" != "1" ] && [ -x "$venv_pip" ]; then
+    sed "s|^tensorflow.*|tflite-runtime==$tflite_version|" \
+      "$PREFIX/requirements.txt" > "$offline_requirements"
+    chown "$APP_USER:$APP_USER" "$offline_requirements"
+    if runuser -u "$APP_USER" -- env HOME="$APP_HOME" \
+      "$venv_pip" install --disable-pip-version-check --no-index -r "$offline_requirements"; then
+      log_info "existing Python environment satisfies requirements; recording fingerprint"
+      printf '%s\n' "$desired_fingerprint" > "$stamp_file"
+      chown "$APP_USER:$APP_USER" "$stamp_file"
+      rm -f "$offline_requirements"
+      return 0
+    fi
+    rm -f "$offline_requirements"
+  fi
+
+  if [ ! -x "$venv_python" ]; then
+    log_info "creating Python virtual environment"
+    runuser -u "$APP_USER" -- env HOME="$APP_HOME" python3 -m venv "$PREFIX/birdnet"
+  fi
+
+  if [ ! -s "$PREFIX/$whl" ]; then
+    log_info "downloading missing TensorFlow Lite wheel: $whl"
+    runuser -u "$APP_USER" -- env HOME="$APP_HOME" \
+      curl -fL --retry 3 --retry-delay 5 -o "$PREFIX/$whl" "$base_url/$whl"
+  else
+    log_info "reusing cached TensorFlow Lite wheel: $PREFIX/$whl"
+  fi
+
+  sed "s|^tensorflow.*|$PREFIX/$whl|" "$PREFIX/requirements.txt" > "$PREFIX/requirements_custom.txt"
+  chown "$APP_USER:$APP_USER" "$PREFIX/requirements_custom.txt" "$PREFIX/$whl"
+
+  log_info "installing changed or missing Python dependencies"
+  runuser -u "$APP_USER" -- env HOME="$APP_HOME" \
+    "$venv_pip" install --disable-pip-version-check -r "$PREFIX/requirements_custom.txt"
+  printf '%s\n' "$desired_fingerprint" > "$stamp_file"
+  chown "$APP_USER:$APP_USER" "$stamp_file"
 }
 
 configure_data_and_config() {
@@ -358,8 +428,13 @@ install_units() {
     if [ "$ALLOW_DEFAULT_AUDIO" != "1" ] && grep -Eq '^REC_CARD="?default"?$' "$PREFIX/birdnet.conf"; then
       die "Refusing to start services with REC_CARD=default. Set a stable ALSA PCM in /etc/birdnet/birdnet.conf or pass --allow-default-audio."
     fi
-    run_cmd systemctl start birdnet-recording.service birdnet-analysis.service spectrogram-viewer.service
-    [ "$WEB_MODE" = "local-caddy" ] && run_cmd systemctl start birdnet-stats.service
+    if [ "$UPDATE_MODE" = "1" ]; then
+      run_cmd systemctl restart birdnet-recording.service birdnet-analysis.service spectrogram-viewer.service
+      [ "$WEB_MODE" = "local-caddy" ] && run_cmd systemctl restart birdnet-stats.service
+    else
+      run_cmd systemctl start birdnet-recording.service birdnet-analysis.service spectrogram-viewer.service
+      [ "$WEB_MODE" = "local-caddy" ] && run_cmd systemctl start birdnet-stats.service
+    fi
   fi
 }
 
@@ -461,7 +536,11 @@ configure_web
 write_sudoers_helper
 create_db_if_possible
 
-log_info "installation prepared"
+if [ "$UPDATE_MODE" = "1" ]; then
+  log_info "update complete"
+else
+  log_info "installation prepared"
+fi
 log_info "manifest: ${MANIFEST_FILE:-dry-run}"
 log_info "backup root: ${BACKUP_ROOT:-dry-run}"
 log_info "edit /etc/birdnet/birdnet.conf to set REC_CARD, LATITUDE, and LONGITUDE before starting services"
