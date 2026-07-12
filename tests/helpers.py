@@ -23,6 +23,7 @@ class Settings(dict):
             "MODEL": "BirdNET_GLOBAL_6K_V2.4_Model_FP16",
             "DATA_MODEL_VERSION": 1,
             "SENSITIVITY": 1.25,
+            "DETECTION_FILTER_MODE": "off",
             "SF_THRESH": 0.003,
             "APPRISE_NOTIFICATION_TITLE": "New backyard bird!",
             "APPRISE_NOTIFY_EACH_DETECTION": "0",

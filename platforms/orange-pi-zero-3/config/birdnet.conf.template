@@ -54,6 +54,17 @@ OVERLAP=0.0
 CONFIDENCE=0.7
 SENSITIVITY=1.25
 
+# Generic false-positive confirmation. Balanced mode accepts a species after
+# repeated top-ranked hits in one recording, or one exceptionally strong and
+# unambiguous hit. Geographically uncommon candidates need more confirmations.
+# This is species-agnostic and does not modify the recorded or playback audio.
+DETECTION_FILTER_MODE=balanced
+DETECTION_MIN_HITS=2
+DETECTION_RARE_MIN_HITS=3
+DETECTION_RARE_OCCURRENCE=0.08
+DETECTION_HIGH_CONFIDENCE=0.97
+DETECTION_MIN_MARGIN=0.10
+
 FREQSHIFT_TOOL=sox
 FREQSHIFT_HI=6000
 FREQSHIFT_LO=3000

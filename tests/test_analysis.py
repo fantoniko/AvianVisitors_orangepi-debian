@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from scripts.utils.analysis import apply_analysis_filter, run_analysis
+from scripts.utils.analysis import apply_analysis_filter, filter_detection_candidates, run_analysis
 from scripts.utils.classes import ParseFileName
 from tests.helpers import TESTDATA, Settings
 from scripts.utils.analysis import filter_humans
@@ -218,6 +218,54 @@ class TestAnalysisAudioFilter(unittest.TestCase):
         signal = np.linspace(-1, 1, 1000, dtype=np.float32)
         filtered = apply_analysis_filter(signal, 48000, highpass_hz=16000, lowpass_hz=1000)
         np.testing.assert_array_equal(filtered, signal)
+
+
+class TestDetectionConfirmationFilter(unittest.TestCase):
+
+    @staticmethod
+    def settings(**overrides):
+        settings = Settings.with_defaults()
+        settings.update({
+            'DETECTION_FILTER_MODE': 'balanced',
+            'DETECTION_MIN_HITS': 2,
+            'DETECTION_RARE_MIN_HITS': 3,
+            'DETECTION_RARE_OCCURRENCE': 0.08,
+            'DETECTION_HIGH_CONFIDENCE': 0.97,
+            'DETECTION_MIN_MARGIN': 0.10,
+        })
+        settings.update(overrides)
+        return settings
+
+    def test_rejects_ambiguous_single_hit(self):
+        raw = {'0.0;3.0': [('Tyto alba', 0.94), ('Other', 0.90)]}
+        result = filter_detection_candidates(raw, {'Tyto alba': 0.2}, self.settings())
+        self.assertEqual(result, {})
+
+    def test_accepts_repeated_common_candidate(self):
+        raw = {
+            '0.0;3.0': [('Pica pica', 0.88), ('Other', 0.30)],
+            '3.0;6.0': [('Pica pica', 0.91), ('Other', 0.20)],
+        }
+        result = filter_detection_candidates(raw, {'Pica pica': 0.3}, self.settings())
+        self.assertEqual(list(result), ['0.0;3.0', '3.0;6.0'])
+
+    def test_rare_candidate_needs_more_hits(self):
+        raw = {
+            '0.0;3.0': [('Rare bird', 0.91), ('Other', 0.20)],
+            '3.0;6.0': [('Rare bird', 0.92), ('Other', 0.20)],
+        }
+        result = filter_detection_candidates(raw, {'Rare bird': 0.04}, self.settings())
+        self.assertEqual(result, {})
+
+    def test_accepts_exceptional_unambiguous_single_hit(self):
+        raw = {'0.0;3.0': [('Bird', 0.985), ('Other', 0.40)]}
+        result = filter_detection_candidates(raw, {'Bird': 0.2}, self.settings())
+        self.assertIn('0.0;3.0', result)
+
+    def test_off_preserves_legacy_results(self):
+        raw = {'0.0;3.0': [('Bird', 0.8), ('Other', 0.7)]}
+        result = filter_detection_candidates(raw, {}, Settings.with_defaults())
+        self.assertIs(result, raw)
 
 
 if __name__ == '__main__':

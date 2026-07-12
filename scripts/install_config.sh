@@ -195,6 +195,16 @@ CONFIDENCE=0.7
 
 SENSITIVITY=1.25
 
+## Generic multi-signal confirmation filter for reducing false positives.
+## Set DETECTION_FILTER_MODE=off to restore the legacy confidence-only logic.
+
+DETECTION_FILTER_MODE=balanced
+DETECTION_MIN_HITS=2
+DETECTION_RARE_MIN_HITS=3
+DETECTION_RARE_OCCURRENCE=0.08
+DETECTION_HIGH_CONFIDENCE=0.97
+DETECTION_MIN_MARGIN=0.10
+
 ## Configuration of the frequency shifting feature, useful for earing impaired people.
 
 ## FREQSHIFT_TOOL

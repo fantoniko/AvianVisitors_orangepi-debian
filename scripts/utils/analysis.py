@@ -23,6 +23,72 @@ def _config_float(conf, key, default=0.0):
         return default
 
 
+def _config_int(conf, key, default=0):
+    try:
+        return conf.getint(key)
+    except (KeyError, ValueError, TypeError):
+        return default
+
+
+def filter_detection_candidates(raw_detections, occurrence_scores, conf):
+    """Apply a generic multi-signal confirmation filter to model candidates.
+
+    The filter deliberately works on evidence rather than named species.  A
+    candidate is easier to accept when it is geographically common, repeated
+    in multiple analysis windows, clearly ahead of the runner-up, or extremely
+    confident.  This is a post-classification filter; it never alters audio.
+    """
+    mode = str(conf.get('DETECTION_FILTER_MODE', 'off')).strip().lower()
+    if mode in ('', 'off', '0', 'false', 'disabled'):
+        return raw_detections
+
+    base_confidence = conf.getfloat('CONFIDENCE')
+    min_hits = max(1, _config_int(conf, 'DETECTION_MIN_HITS', 2))
+    rare_min_hits = max(min_hits, _config_int(conf, 'DETECTION_RARE_MIN_HITS', 3))
+    rare_occurrence = max(0.0, _config_float(conf, 'DETECTION_RARE_OCCURRENCE', 0.08))
+    high_confidence = max(base_confidence, _config_float(conf, 'DETECTION_HIGH_CONFIDENCE', 0.97))
+    min_margin = max(0.0, _config_float(conf, 'DETECTION_MIN_MARGIN', 0.10))
+
+    evidence = {}
+    top_by_slot = {}
+    for time_slot, entries in raw_detections.items():
+        if not entries:
+            continue
+        top_name, top_confidence = entries[0]
+        runner_up = entries[1][1] if len(entries) > 1 else 0.0
+        top_by_slot[time_slot] = (top_name, float(top_confidence), float(top_confidence) - float(runner_up))
+        if top_confidence >= base_confidence:
+            evidence.setdefault(top_name, []).append(top_by_slot[time_slot])
+
+    accepted_species = set()
+    for sci_name, hits in evidence.items():
+        occurrence = occurrence_scores.get(sci_name)
+        required_hits = rare_min_hits if occurrence is not None and occurrence < rare_occurrence else min_hits
+        best_confidence = max(hit[1] for hit in hits)
+        best_margin = max(hit[2] for hit in hits)
+        repeated = len(hits) >= required_hits
+        exceptional_single = best_confidence >= high_confidence and best_margin >= min_margin
+        if repeated or exceptional_single:
+            accepted_species.add(sci_name)
+        else:
+            log.info(
+                'Confirmation filter rejected %s: hits=%d/%d, max_confidence=%.4f, '
+                'max_margin=%.4f, occurrence=%s',
+                sci_name, len(hits), required_hits, best_confidence, best_margin,
+                'unknown' if occurrence is None else f'{occurrence:.4f}',
+            )
+
+    filtered = {}
+    for time_slot, entries in raw_detections.items():
+        # Once a species has enough file-level evidence, retain all of its
+        # above-threshold windows so reporting and extraction keep their timing.
+        kept = [entry for entry in entries
+                if entry[0] in accepted_species and entry[1] >= base_confidence]
+        if kept:
+            filtered[time_slot] = kept
+    return filtered
+
+
 def apply_analysis_filter(sig, rate, highpass_hz=0.0, lowpass_hz=0.0):
     """Apply an optional, zero-phase band-pass filter before BirdNET inference.
 
@@ -214,6 +280,11 @@ def run_analysis(file):
     # Process audio data and get detections
     raw_detections, predicted_species_list = analyzeAudioData(audio_data, conf.getfloat('OVERLAP'), conf.getfloat('LATITUDE'),
                                                               conf.getfloat('LONGITUDE'), file.week)
+    raw_detections = filter_detection_candidates(
+        raw_detections,
+        model.get_species_occurrence_scores(),
+        conf,
+    )
     confident_detections = []
     for time_slot, entries in raw_detections.items():
         sci_name, confidence = entries[0]
