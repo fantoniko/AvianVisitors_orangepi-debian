@@ -35,6 +35,20 @@ sudo bash platforms/split-web-host/install.sh \
   --allow-external-web-bind
 ```
 
+Install the optional illustration worker with its default quiet-night schedule
+(work is allowed from 08:00 until 22:00 local time):
+
+```sh
+sudo bash platforms/split-web-host/install.sh \
+  --birdnet-api-base http://orange-pi.local:8079/avian/api \
+  --enable-image-worker
+```
+
+Choose another daytime window with `--image-worker-active-start HH:MM` and
+`--image-worker-active-end HH:MM`. The worker checks the window between image
+requests and cutouts, so remaining work is safely deferred rather than started
+at night.
+
 ## Verify
 
 ```sh

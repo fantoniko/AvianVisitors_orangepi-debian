@@ -1,6 +1,8 @@
 http://:__AV_WEB_PORT__ {
   bind __AV_WEB_HOST__
   root * __AV_WEB_ROOT__
+  @maskManifests path /dims.json /masks.json
+  header @maskManifests Cache-Control "public, max-age=31536000, immutable"
   php_fastcgi unix/__AV_PHP_FPM_SOCKET__
   file_server
 }

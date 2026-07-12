@@ -22,6 +22,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from worker_schedule import is_active_window, parse_clock
+
 
 def slugify(sci: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", sci.lower()).strip("-")
@@ -137,16 +139,12 @@ def is_transparent_png(path: Path) -> bool:
         return im.getchannel("A").getextrema()[0] == 0
 
 
-def load_apt_slugs(apt: Path) -> set[str]:
-    if not apt.exists():
-        return set()
-    src = apt.read_text()
-    match = re.search(r"var DIMS = (\{.*?\});", src)
-    if not match:
+def load_mask_slugs(dims_path: Path) -> set[str]:
+    if not dims_path.exists():
         return set()
     try:
-        return set(json.loads(match.group(1)))
-    except json.JSONDecodeError:
+        return set(json.loads(dims_path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
         return set()
 
 
@@ -219,13 +217,28 @@ def main() -> int:
                     help="seconds before retrying a failed species (default: 86400)")
     ap.add_argument("--lock", type=Path, default=Path("/tmp/avian-visitors-illustrations.lock"),
                     help="lock file to prevent overlapping runs")
+    ap.add_argument("--active-start", default=None,
+                    help="do expensive work only after this local HH:MM time")
+    ap.add_argument("--active-end", default=None,
+                    help="stop starting expensive work at this local HH:MM time")
     args = ap.parse_args()
+
+    if (args.active_start is None) != (args.active_end is None):
+        ap.error("--active-start and --active-end must be used together")
+    if args.active_start is not None:
+        try:
+            parse_clock(args.active_start)
+            parse_clock(args.active_end)
+        except ValueError as exc:
+            ap.error(str(exc))
 
     repo = args.repo.resolve()
     load_env_file(repo / ".env.openclaw")
     illustrations = repo / "avian" / "assets" / "illustrations"
     apt = repo / "avian" / "frontend" / "apt.js"
-    apt_slugs = load_apt_slugs(apt)
+    dims_manifest = repo / "avian" / "frontend" / "dims.json"
+    masks_manifest = repo / "avian" / "frontend" / "masks.json"
+    mask_slugs = load_mask_slugs(dims_manifest)
     state_path = args.state or repo / "avian" / "runtime" / "image-worker-state.json"
     state = load_state(state_path)
     now = utc_now()
@@ -237,6 +250,20 @@ def main() -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("another illustration job is already running; exiting")
+            return 0
+
+        if args.active_start is not None and not is_active_window(
+                args.active_start, args.active_end):
+            print(
+                f"[schedule] outside active window "
+                f"{args.active_start}-{args.active_end}; deferring illustration work"
+            )
+            state["last_run"] = {
+                "at": iso(now),
+                "status": "deferred",
+                "reason": "outside active window",
+            }
+            write_state(state_path, state)
             return 0
 
         api_url = args.api_url
@@ -280,7 +307,7 @@ def main() -> int:
                     break
                 if not is_transparent_png(path):
                     needs_cutout.append(slug)
-                elif slug not in apt_slugs:
+                elif slug not in mask_slugs:
                     needs_mask_rebuild = True
 
         stats["missing_species"] = len(missing)
@@ -295,6 +322,9 @@ def main() -> int:
             ]
             if args.provider == "openclaw":
                 cmd.extend(["--openclaw-size", args.openclaw_size])
+            if args.active_start is not None:
+                cmd.extend(["--active-start", args.active_start,
+                            "--active-end", args.active_end])
             try:
                 run(cmd, input_text=lines)
             except subprocess.CalledProcessError as exc:
@@ -329,6 +359,20 @@ def main() -> int:
             return 0
 
         for slug in needs_cutout:
+            if args.active_start is not None and not is_active_window(
+                    args.active_start, args.active_end):
+                print(
+                    f"[schedule] active window {args.active_start}-{args.active_end} ended; "
+                    "deferring remaining cutouts"
+                )
+                state["last_run"] = {
+                    "at": iso(utc_now()),
+                    "status": "deferred",
+                    "reason": "active window ended during cutouts",
+                    "stats": stats,
+                }
+                write_state(state_path, state)
+                return 0
             try:
                 run_with_signal_retries([
                     py, str(repo / "avian" / "scripts" / "cutout.py"),
@@ -344,7 +388,22 @@ def main() -> int:
                 write_state(state_path, state)
                 raise
 
-        before = apt.read_text()
+        if args.active_start is not None and not is_active_window(
+                args.active_start, args.active_end):
+            print("[schedule] active window ended; deferring mask rebuild")
+            state["last_run"] = {
+                "at": iso(utc_now()),
+                "status": "deferred",
+                "reason": "active window ended before mask rebuild",
+                "stats": stats,
+            }
+            write_state(state_path, state)
+            return 0
+
+        before_manifests = tuple(
+            path.read_bytes() if path.exists() else b""
+            for path in (dims_manifest, masks_manifest)
+        )
         try:
             run([py, str(repo / "avian" / "scripts" / "build_masks.py")])
         except subprocess.CalledProcessError as exc:
@@ -353,8 +412,11 @@ def main() -> int:
                                  "error": reason}
             write_state(state_path, state)
             raise
-        after_masks = apt.read_text()
-        if after_masks != before:
+        after_manifests = tuple(
+            path.read_bytes() if path.exists() else b""
+            for path in (dims_manifest, masks_manifest)
+        )
+        if after_manifests != before_manifests:
             bump_cache_versions(apt)
             stats["mask_rebuild"] = True
             print("frontend masks changed; bumped SKETCH_VERSION and IMG_VERSION")

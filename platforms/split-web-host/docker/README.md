@@ -64,6 +64,8 @@ OPENCLAW_MODEL=openclaw-image
 AV_IMAGE_WORKER_INTERVAL_SECONDS=3600
 AV_IMAGE_WORKER_START_DELAY_SECONDS=300
 AV_IMAGE_WORKER_RUN_ON_START=1
+AV_IMAGE_WORKER_ACTIVE_START=08:00
+AV_IMAGE_WORKER_ACTIVE_END=22:00
 AV_IMAGE_WORKER_STATE=/srv/app/avian/runtime/image-worker-state.json
 AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS=86400
 AV_IMAGE_WORKER_LIMIT=20
@@ -130,6 +132,14 @@ the first run. This keeps ordinary Portainer redeploys from immediately
 competing with image rebuilds and web/PHP startup. Set
 `AV_IMAGE_WORKER_RUN_ON_START=0` if the worker should wait a full interval
 before its first run after container start.
+
+Expensive generation and cutout work is restricted to local time
+`AV_IMAGE_WORKER_ACTIVE_START=08:00` through
+`AV_IMAGE_WORKER_ACTIVE_END=22:00` (the container uses `TZ`, normally
+`Europe/Moscow`). The window is checked before a run and between image requests
+and cutouts, so unfinished work is deferred to the next daytime cycle. Set both
+values equal (for example `00:00`) to allow work around the clock. An overnight
+window such as `22:00`-`06:00` is also supported.
 
 If rembg runs out of memory, switch to the lighter model:
 

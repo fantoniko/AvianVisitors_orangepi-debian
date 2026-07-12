@@ -10,7 +10,7 @@ repository root.
 1. `pregen.py` renders each bird with Gemini 2.5 Flash Image or a local
    OpenClaw-compatible image API, on a flat cream ground.
 2. `cutout.py` removes the ground with BiRefNet and crops to the bird.
-3. `build_masks.py` rebuilds the collage silhouette masks inlined in `apt.js`.
+3. `build_masks.py` rebuilds the external `dims.json` and `masks.json` manifests.
 4. `verify.py` (optional) runs an adversarial species-ID + anatomy check.
 
 ```bash
@@ -27,7 +27,7 @@ python avian/scripts/pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-re
 # 2. cut the ground off and crop
 python avian/scripts/cutout.py
 
-# 3. rebuild the collage masks, then bump SKETCH_VERSION + IMG_VERSION in apt.js
+# 3. rebuild the collage manifests, then bump SKETCH_VERSION + IMG_VERSION in apt.js
 python avian/scripts/build_masks.py
 ```
 

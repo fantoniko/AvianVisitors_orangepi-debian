@@ -16,6 +16,8 @@ IMAGE_WORKER_HOURS=24
 IMAGE_WORKER_LIMIT=20
 IMAGE_WORKER_SIZE="1536x1024"
 IMAGE_WORKER_CUTOUT_MODEL="birefnet-general"
+IMAGE_WORKER_ACTIVE_START="08:00"
+IMAGE_WORKER_ACTIVE_END="22:00"
 
 usage() {
   cat <<'EOF'
@@ -32,6 +34,8 @@ Options:
   --image-worker-limit N      Maximum species per run (default: 20)
   --image-worker-size SIZE    OpenClaw image size (default: 1536x1024)
   --image-worker-cutout-model rembg model for cutout.py (default: birefnet-general)
+  --image-worker-active-start TIME  Start local HH:MM (default: 08:00)
+  --image-worker-active-end TIME    Stop local HH:MM (default: 22:00)
   --skip-packages             Do not install apt packages
   --dry-run                   Print actions without changing the system
 EOF
@@ -49,6 +53,8 @@ while [ "$#" -gt 0 ]; do
     --image-worker-limit) IMAGE_WORKER_LIMIT="${2:?missing number after --image-worker-limit}"; shift 2 ;;
     --image-worker-size) IMAGE_WORKER_SIZE="${2:?missing size after --image-worker-size}"; shift 2 ;;
     --image-worker-cutout-model) IMAGE_WORKER_CUTOUT_MODEL="${2:?missing model after --image-worker-cutout-model}"; shift 2 ;;
+    --image-worker-active-start) IMAGE_WORKER_ACTIVE_START="${2:?missing time after --image-worker-active-start}"; shift 2 ;;
+    --image-worker-active-end) IMAGE_WORKER_ACTIVE_END="${2:?missing time after --image-worker-active-end}"; shift 2 ;;
     --skip-packages) SKIP_PACKAGES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -97,6 +103,10 @@ esac
 case "$IMAGE_WORKER_CUTOUT_MODEL" in
   *[[:space:]]*) die "--image-worker-cutout-model must not contain whitespace" ;;
 esac
+[[ "$IMAGE_WORKER_ACTIVE_START" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] ||
+  die "--image-worker-active-start must be HH:MM: $IMAGE_WORKER_ACTIVE_START"
+[[ "$IMAGE_WORKER_ACTIVE_END" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] ||
+  die "--image-worker-active-end must be HH:MM: $IMAGE_WORKER_ACTIVE_END"
 
 bind_host="${WEB_BIND%:*}"
 bind_port="${WEB_BIND##*:}"
@@ -250,7 +260,7 @@ User=$repo_owner
 Group=$repo_group
 WorkingDirectory=$REPO_ROOT
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$venv/bin/python $REPO_ROOT/avian/scripts/auto_illustrate_recent.py --api-url $recent_url --provider openclaw --openclaw-size $IMAGE_WORKER_SIZE --limit $IMAGE_WORKER_LIMIT --hours $IMAGE_WORKER_HOURS --cutout-model $IMAGE_WORKER_CUTOUT_MODEL
+ExecStart=$venv/bin/python $REPO_ROOT/avian/scripts/auto_illustrate_recent.py --api-url $recent_url --provider openclaw --openclaw-size $IMAGE_WORKER_SIZE --limit $IMAGE_WORKER_LIMIT --hours $IMAGE_WORKER_HOURS --cutout-model $IMAGE_WORKER_CUTOUT_MODEL --active-start $IMAGE_WORKER_ACTIVE_START --active-end $IMAGE_WORKER_ACTIVE_END
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

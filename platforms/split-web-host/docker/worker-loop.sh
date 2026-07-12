@@ -13,6 +13,8 @@ cutout_model="${AV_IMAGE_WORKER_CUTOUT_MODEL:-birefnet-general}"
 host_uid="${AV_HOST_UID:-1000}"
 host_gid="${AV_HOST_GID:-1000}"
 chown_enabled="${AV_IMAGE_WORKER_CHOWN:-0}"
+active_start="${AV_IMAGE_WORKER_ACTIVE_START:-08:00}"
+active_end="${AV_IMAGE_WORKER_ACTIVE_END:-22:00}"
 
 export OMP_NUM_THREADS="${AV_ONNX_THREADS:-2}"
 export OPENBLAS_NUM_THREADS="${AV_ONNX_THREADS:-2}"
@@ -21,7 +23,7 @@ export NUMEXPR_NUM_THREADS="${AV_ONNX_THREADS:-2}"
 export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 
 log_runtime_limits() {
-  echo "worker runtime: cutout_model=$cutout_model size=$size limit=$limit threads=${AV_ONNX_THREADS:-2} malloc_arena=$MALLOC_ARENA_MAX"
+  echo "worker runtime: cutout_model=$cutout_model size=$size limit=$limit active=$active_start-$active_end threads=${AV_ONNX_THREADS:-2} malloc_arena=$MALLOC_ARENA_MAX"
   echo "worker runtime: nproc=$(nproc 2>/dev/null || echo unknown)"
   if command -v free >/dev/null 2>&1; then
     free -h | sed 's/^/worker memory: /'
@@ -43,6 +45,8 @@ run_once() {
       --limit "$limit" \
       --state "$state_path" \
       --failure-cooldown-seconds "$failure_cooldown" \
+      --active-start "$active_start" \
+      --active-end "$active_end" \
       --cutout-retries "${AV_IMAGE_WORKER_CUTOUT_RETRIES:-1}" \
       --cutout-retry-delay "${AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY:-15}" \
       --cutout-model "$cutout_model"; then

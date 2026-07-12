@@ -1,11 +1,7 @@
-FROM php:8.3-fpm-bookworm
+FROM php:8.3-fpm-alpine
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    libcurl4-openssl-dev \
-  && docker-php-ext-install curl \
-  && rm -rf /var/lib/apt/lists/*
-
-RUN printf '[www]\nclear_env = no\n' > /usr/local/etc/php-fpm.d/zz-avian-env.conf
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+  && printf '[www]\nclear_env = no\npm = ondemand\npm.max_children = 2\npm.process_idle_timeout = 10s\npm.max_requests = 500\n' \
+    > /usr/local/etc/php-fpm.d/zz-avian-env.conf
 
 WORKDIR /srv/app

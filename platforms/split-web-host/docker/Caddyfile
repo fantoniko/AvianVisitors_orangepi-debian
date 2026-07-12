@@ -1,6 +1,9 @@
 :8080 {
   encode zstd gzip
 
+  @maskManifests path /dims.json /masks.json
+  header @maskManifests Cache-Control "public, max-age=31536000, immutable"
+
   handle /favicon.png {
     root * /srv/app
     rewrite * /avian/assets/favicon.png

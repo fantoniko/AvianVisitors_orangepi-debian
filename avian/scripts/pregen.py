@@ -4,7 +4,7 @@
 Step 1 of the illustration pipeline:
     1. pregen.py       render each bird on a uniform cream ground
     2. cutout.py       remove the ground (BiRefNet) and crop to the bird
-    3. build_masks.py  refresh the collage silhouette masks in apt.js
+    3. build_masks.py  refresh the external collage mask manifests
 
 Reads a species list (BirdNET-Pi's labels.txt, eBird, or stdin),
 fetches a Wikipedia reference photo for each species, and generates an
@@ -66,6 +66,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from worker_schedule import is_active_window, parse_clock
 
 # Gemini's image-out model. The endpoint changes occasionally; if you
 # get a 404 here, check Google's model catalog and bump this.
@@ -702,7 +704,20 @@ def main() -> int:
     ap.add_argument("--sleep", type=float, default=6.0,
                     help="Seconds between API calls (default 6 = headroom under free-tier RPM cap)")
     ap.add_argument("--limit", type=int, default=0, help="Cap species count for testing")
+    ap.add_argument("--active-start", default=None,
+                    help="do expensive work only after this local HH:MM time")
+    ap.add_argument("--active-end", default=None,
+                    help="stop starting image requests at this local HH:MM time")
     args = ap.parse_args()
+
+    if (args.active_start is None) != (args.active_end is None):
+        ap.error("--active-start and --active-end must be used together")
+    if args.active_start is not None:
+        try:
+            parse_clock(args.active_start)
+            parse_clock(args.active_end)
+        except ValueError as exc:
+            ap.error(str(exc))
 
     gemini_key = args.gemini_key or os.environ.get("GEMINI_API_KEY", "")
     openclaw_url = (args.openclaw_url or os.environ.get("OPENCLAW_BASE_URL", "")).rstrip("/")
@@ -781,6 +796,15 @@ def main() -> int:
             if path.exists() and not args.force:
                 skipped_existing += 1
                 continue
+            if args.active_start is not None and not is_active_window(
+                    args.active_start, args.active_end):
+                print(
+                    f"[schedule] active window {args.active_start}-{args.active_end} ended; "
+                    "deferring remaining image requests",
+                    flush=True,
+                )
+                print(f"\ngenerated {done} · skipped {skipped_existing} · failed {failed}")
+                return 0 if failed == 0 else 1
             try:
                 style_ref_path = args.styles / select_style_ref(sci, pose)
                 if not style_ref_path.exists():

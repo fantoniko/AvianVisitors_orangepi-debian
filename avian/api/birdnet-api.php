@@ -4,6 +4,7 @@
 //
 // Endpoints (?action=...):
 //   stats       - totals (detections, unique species, today, last hour)
+//   live        - stats + recent in one polling response
 //   lifelist    - every species with first_seen, last_seen, total_count
 //   recent      - &hours=N (default 24): species heard in the window
 //   species     - &sci=<sci_name>: per-species detail page
@@ -66,26 +67,86 @@ function one(SQLite3 $db, string $sql, array $bind = []) {
     return $r[0] ?? null;
 }
 
+function stats_payload(SQLite3 $db): array {
+    // All counters come from one table pass. Explicit PHP-side boundaries
+    // avoid DATETIME(Date||Time) conversion for every row.
+    $now = time();
+    $todayDate = date('Y-m-d', $now);
+    $nowTime = date('H:i:s', $now);
+    $hourCutoff = $now - 3600;
+    $hourDate = date('Y-m-d', $hourCutoff);
+    $hourTime = date('H:i:s', $hourCutoff);
+    $weekDate = date('Y-m-d', $now - 6 * 86400);
+    $statsSql = <<<'SQL'
+SELECT
+  COUNT(*) AS total,
+  COUNT(DISTINCT Sci_Name) AS species,
+  SUM(CASE WHEN Date = :today THEN 1 ELSE 0 END) AS today,
+  COUNT(DISTINCT CASE WHEN Date = :today THEN Sci_Name END) AS today_species,
+  SUM(CASE WHEN
+        (Date > :hour_date OR (Date = :hour_date AND Time >= :hour_time))
+        AND (Date < :today OR (Date = :today AND Time <= :now_time))
+      THEN 1 ELSE 0 END) AS last_hour,
+  SUM(CASE WHEN Date BETWEEN :week_date AND :today THEN 1 ELSE 0 END) AS week,
+  COUNT(DISTINCT CASE WHEN Date BETWEEN :week_date AND :today THEN Sci_Name END) AS week_species,
+  MIN(Date) AS started
+FROM detections
+SQL;
+    $stats = one($db, $statsSql, [
+        ':today' => $todayDate,
+        ':now_time' => $nowTime,
+        ':hour_date' => $hourDate,
+        ':hour_time' => $hourTime,
+        ':week_date' => $weekDate,
+    ]) ?? [];
+    return [
+        'totals'    => ['detections' => (int)($stats['total'] ?? 0), 'species' => (int)($stats['species'] ?? 0)],
+        'today'     => ['detections' => (int)($stats['today'] ?? 0), 'species' => (int)($stats['today_species'] ?? 0)],
+        'last_hour' => ['detections' => (int)($stats['last_hour'] ?? 0)],
+        'week'      => ['detections' => (int)($stats['week'] ?? 0), 'species' => (int)($stats['week_species'] ?? 0)],
+        'started'   => $stats['started'] ?? null,
+        'as_of'     => date('c'),
+    ];
+}
+
+function recent_payload(SQLite3 $db, int $hours): array {
+    $hours = max(1, min(1000000, $hours));
+    $cutoff = time() - ($hours * 3600);
+    $cutoffDate = date('Y-m-d', $cutoff);
+    $cutoffTime = date('H:i:s', $cutoff);
+    // Compare stored columns directly so detections_Date_Time remains usable.
+    $rs = rows($db,
+      "WITH windowed AS ("
+    . "  SELECT Date, Time, Sci_Name, Com_Name, Confidence, File_Name, ROW_NUMBER() OVER ("
+    . "    PARTITION BY Sci_Name ORDER BY Confidence DESC, Date DESC, Time DESC"
+    . "  ) AS confidence_rank "
+    . "  FROM detections WHERE (Date, Time) >= (:cutoff_date, :cutoff_time)"
+    . ") "
+    . "SELECT Sci_Name AS sci, MAX(Com_Name) AS com, COUNT(*) AS n, "
+    . "       MAX(Confidence) AS best_conf, MAX(Date||' '||Time) AS last_seen, "
+    . "       MAX(CASE WHEN confidence_rank = 1 THEN File_Name END) AS top_file, "
+    . "       MAX(CASE WHEN confidence_rank = 1 THEN Date||' '||Time END) AS top_at "
+    . "FROM windowed GROUP BY Sci_Name ORDER BY last_seen DESC",
+      [':cutoff_date' => $cutoffDate, ':cutoff_time' => $cutoffTime]
+    );
+    return ['hours' => $hours, 'species' => $rs, 'as_of' => date('c')];
+}
+
 $action = $_GET['action'] ?? 'stats';
 
 switch ($action) {
 
     case 'stats': {
-        $total       = (int)(one($db, 'SELECT COUNT(*) AS n FROM detections')['n'] ?? 0);
-        $species     = (int)(one($db, 'SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections')['n'] ?? 0);
-        $today       = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date = DATE('now','localtime')")['n'] ?? 0);
-        $todaySpec   = (int)(one($db, "SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections WHERE Date = DATE('now','localtime')")['n'] ?? 0);
-        $lastHour    = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE DATETIME(Date||' '||Time) BETWEEN DATETIME('now','localtime','-1 hour') AND DATETIME('now','localtime')")['n'] ?? 0);
-        $week        = (int)(one($db, "SELECT COUNT(*) AS n FROM detections WHERE Date >= DATE('now','localtime','-6 day')")['n'] ?? 0);
-        $weekSpec    = (int)(one($db, "SELECT COUNT(DISTINCT Sci_Name) AS n FROM detections WHERE Date >= DATE('now','localtime','-6 day')")['n'] ?? 0);
-        $first       = one($db, 'SELECT MIN(Date) AS d FROM detections');
+        echo json_encode(stats_payload($db));
+        break;
+    }
+
+    case 'live': {
+        $hours = max(1, min(1000000, (int)($_GET['hours'] ?? 24)));
         echo json_encode([
-            'totals'    => ['detections' => $total, 'species' => $species],
-            'today'     => ['detections' => $today, 'species' => $todaySpec],
-            'last_hour' => ['detections' => $lastHour],
-            'week'      => ['detections' => $week,  'species' => $weekSpec],
-            'started'   => $first['d'] ?? null,
-            'as_of'     => date('c'),
+            'stats' => stats_payload($db),
+            'recent' => recent_payload($db, $hours),
+            'as_of' => date('c'),
         ]);
         break;
     }
@@ -107,26 +168,7 @@ switch ($action) {
         // "ALL" button can turn off the time filter without needing a
         // separate code path.
         $hours = max(1, min(1000000, (int)($_GET['hours'] ?? 24)));
-        $cutoff = time() - ($hours * 3600);
-        $cutoffDate = date('Y-m-d', $cutoff);
-        $cutoffTime = date('H:i:s', $cutoff);
-        // Compare the stored date and time columns directly so SQLite can use
-        // detections_Date_Time instead of applying julianday() to every row.
-        $rs = rows($db,
-          "WITH windowed AS ("
-        . "  SELECT *, ROW_NUMBER() OVER ("
-        . "    PARTITION BY Sci_Name ORDER BY Confidence DESC, Date DESC, Time DESC"
-        . "  ) AS confidence_rank "
-        . "  FROM detections WHERE (Date, Time) >= (:cutoff_date, :cutoff_time)"
-        . ") "
-        . "SELECT Sci_Name AS sci, MAX(Com_Name) AS com, COUNT(*) AS n, "
-        . "       MAX(Confidence) AS best_conf, MAX(Date||' '||Time) AS last_seen, "
-        . "       MAX(CASE WHEN confidence_rank = 1 THEN File_Name END) AS top_file, "
-        . "       MAX(CASE WHEN confidence_rank = 1 THEN Date||' '||Time END) AS top_at "
-        . "FROM windowed GROUP BY Sci_Name ORDER BY last_seen DESC",
-          [':cutoff_date' => $cutoffDate, ':cutoff_time' => $cutoffTime]
-        );
-        echo json_encode(['hours' => $hours, 'species' => $rs, 'as_of' => date('c')]);
+        echo json_encode(recent_payload($db, $hours));
         break;
     }
 
