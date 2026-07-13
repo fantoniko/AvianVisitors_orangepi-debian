@@ -6,18 +6,19 @@ Step 2 of the illustration pipeline (after pregen.py, before build_masks.py).
 pregen.py renders each bird on a flat cream ground because the image model
 can't cut a clean transparent background on its own (it leaves holes and
 fringes). A flat known ground, by contrast, removes cleanly. This runs each
-illustration through the BiRefNet matting model (via rembg), then crops to
-the bird's bounding box with a small even margin, and saves an RGBA cutout
-back in place.
+illustration through a background-removal model (via rembg), then crops to the
+bird's bounding box with a small even margin, and saves an RGBA cutout back in
+place.
 
 Idempotent: an illustration that already has a transparent background is
 skipped unless you pass --force.
 
 Requires rembg + onnxruntime (see requirements.txt). The first run downloads
-the BiRefNet model (~1 GB) to ~/.u2net/.
+the selected model to ~/.u2net/.
 
-BiRefNet is memory-heavy. On small web hosts, process one slug per invocation
-or use the lighter `--model u2netp` fallback if the process is killed.
+The lightweight `u2netp` model is the default for unattended workers.
+`birefnet-general` can produce finer edges, but its transient memory use can
+reach several GiB.
 
 Usage:
     python3 cutout.py                      # process every illustration
@@ -39,8 +40,8 @@ def main() -> int:
                     help="Slugs to process (e.g. calypte-anna). Default: all.")
     ap.add_argument("--dir", type=Path, default=here / "assets" / "illustrations",
                     help="Illustration directory (default: avian/assets/illustrations/)")
-    ap.add_argument("--model", default="birefnet-general",
-                    help="rembg model name (default: birefnet-general)")
+    ap.add_argument("--model", default="u2netp",
+                    help="rembg model name (default: u2netp)")
     ap.add_argument("--margin", type=float, default=0.02,
                     help="Even margin around the bird, as a fraction of its "
                          "long side (default: 0.02)")

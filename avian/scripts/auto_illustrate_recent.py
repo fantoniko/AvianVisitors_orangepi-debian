@@ -200,8 +200,8 @@ def main() -> int:
     ap.add_argument("--openclaw-size", default=os.environ.get("OPENCLAW_SIZE", "1536x1024"))
     ap.add_argument("--sleep", type=float, default=2.0,
                     help="delay between image requests (default: 2)")
-    ap.add_argument("--cutout-model", default="birefnet-general",
-                    help="rembg model for cutout.py (default: birefnet-general)")
+    ap.add_argument("--cutout-model", default="u2netp",
+                    help="rembg model for cutout.py (default: u2netp)")
     ap.add_argument("--cutout-retries", type=int,
                     default=int(os.environ.get("AV_IMAGE_WORKER_CUTOUT_RETRIES", "1")),
                     help="retries when cutout.py is killed by SIGKILL (default: 1)")

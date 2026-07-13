@@ -15,7 +15,7 @@ IMAGE_WORKER_INTERVAL="1h"
 IMAGE_WORKER_HOURS=24
 IMAGE_WORKER_LIMIT=20
 IMAGE_WORKER_SIZE="1536x1024"
-IMAGE_WORKER_CUTOUT_MODEL="birefnet-general"
+IMAGE_WORKER_CUTOUT_MODEL="u2netp"
 IMAGE_WORKER_ACTIVE_START="08:00"
 IMAGE_WORKER_ACTIVE_END="22:00"
 
@@ -33,7 +33,7 @@ Options:
   --image-worker-hours N      Recent API window to inspect (default: 24)
   --image-worker-limit N      Maximum species per run (default: 20)
   --image-worker-size SIZE    OpenClaw image size (default: 1536x1024)
-  --image-worker-cutout-model rembg model for cutout.py (default: birefnet-general)
+  --image-worker-cutout-model rembg model for cutout.py (default: u2netp)
   --image-worker-active-start TIME  Start local HH:MM (default: 08:00)
   --image-worker-active-end TIME    Stop local HH:MM (default: 22:00)
   --skip-packages             Do not install apt packages

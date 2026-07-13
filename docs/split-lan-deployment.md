@@ -193,7 +193,8 @@ sudo bash platforms/deploy.sh web-host \
   --image-worker-size 1536x1024
 ```
 
-If the host runs out of memory during background removal, use the lighter model:
+The image worker defaults to the lighter `u2netp` model. To make that choice
+explicit during installation:
 
 ```sh
 sudo bash platforms/deploy.sh web-host \

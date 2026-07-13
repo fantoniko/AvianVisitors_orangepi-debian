@@ -57,8 +57,9 @@ extension, add `--no-refs` to generate from text prompts only.
 
 After OpenClaw generation, run `cutout.py` before checking the collage. The raw
 image model output is intentionally a flat paper rectangle; `cutout.py` is what
-turns it into transparent RGBA artwork. On memory-constrained hosts, process a
-few slugs at a time:
+turns it into transparent RGBA artwork. The default `u2netp` model is selected
+to keep unattended runs within modest memory limits. Process a few slugs at a
+time:
 
 ```bash
 . .venv-cutout/bin/activate
@@ -68,11 +69,11 @@ python avian/scripts/cutout.py cyanistes-caeruleus --force
 python avian/scripts/build_masks.py
 ```
 
-If BiRefNet is killed by the OOM killer, retry the affected slug with the
-lighter model:
+On a host with plenty of spare RAM, the heavier BiRefNet model can be selected
+for potentially finer edges:
 
 ```bash
-python avian/scripts/cutout.py turdus-merula --force --model u2netp
+python avian/scripts/cutout.py turdus-merula --force --model birefnet-general
 python avian/scripts/build_masks.py
 ```
 

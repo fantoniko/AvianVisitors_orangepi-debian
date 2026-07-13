@@ -70,7 +70,7 @@ AV_IMAGE_WORKER_STATE=/srv/app/avian/runtime/image-worker-state.json
 AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS=86400
 AV_IMAGE_WORKER_LIMIT=20
 AV_IMAGE_WORKER_SIZE=1536x1024
-AV_IMAGE_WORKER_CUTOUT_MODEL=birefnet-general
+AV_IMAGE_WORKER_CUTOUT_MODEL=u2netp
 AV_IMAGE_WORKER_CUTOUT_RETRIES=1
 AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY=15
 AV_IMAGE_WORKER_CHOWN=0
@@ -141,11 +141,14 @@ and cutouts, so unfinished work is deferred to the next daytime cycle. Set both
 values equal (for example `00:00`) to allow work around the clock. An overnight
 window such as `22:00`-`06:00` is also supported.
 
-If rembg runs out of memory, switch to the lighter model:
+The worker defaults to the memory-friendly model:
 
 ```sh
 AV_IMAGE_WORKER_CUTOUT_MODEL=u2netp
 ```
+
+For potentially finer edges on a host with plenty of spare RAM, opt into
+`birefnet-general`. It can create large transient memory and swap spikes.
 
 The worker does not recursively `chown` generated assets by default because the
 app uses Docker volumes and recursive ownership fixes are expensive on large
