@@ -281,6 +281,16 @@
   // Decode and cache each mask once. Sparse cell-list form (only "on"
   // cells) makes collision tests linear in opaque area, not total area.
   var maskCache = {};
+  // Newly detected species can have a generated transparent PNG before the
+  // hourly worker has rebuilt dims.json/masks.json. Use a one-cell opaque mask
+  // in that short window: packing becomes bounding-box based, but the bird is
+  // visible immediately instead of being silently dropped from the collage.
+  var FALLBACK_MASK = {
+    w: 1,
+    h: 1,
+    cells: new Uint16Array([0, 0]),
+    bits: new Uint8Array([128]),
+  };
   function loadMask(slug) {
     if (maskCache[slug]) return maskCache[slug];
     var rec = MASKS[slug];
@@ -499,7 +509,7 @@
       var slug = pose === 2 ? base + '-2' : base;
       var mask = loadMask(slug);
       if (!mask && pose === 2) { pose = 1; slug = base; mask = loadMask(slug); collagePose[s.sci] = 1; }
-      if (!mask) return null;
+      if (!mask) mask = FALLBACK_MASK;
       var d = DIMS[slug];
       var n = +s.n; if (!n || isNaN(n)) n = 1;
       return {
@@ -1446,7 +1456,25 @@
         return { stats: stats, recent: null };
       });
     }
-    return fetchJson('./avian/api/birdnet-api.php?action=live&hours=' + hours);
+    return fetchJson('./avian/api/birdnet-api.php?action=live&hours=' + hours)
+      .then(function (live) {
+        // A rolling deploy can update the web host before the Orange Pi API.
+        // Treat an unexpected 2xx payload like an unavailable live endpoint so
+        // the collage still works against the previous API version.
+        if (!live || !live.stats || !live.recent) return Promise.reject('invalid live payload');
+        return live;
+      })
+      .catch(function () {
+        // Compatibility path for Orange Pi installations that do not have the
+        // combined `live` action yet. It costs one extra request only while the
+        // API is old or temporarily returning a bad combined response.
+        return Promise.all([
+          fetchJson('./avian/api/birdnet-api.php?action=stats'),
+          fetchJson('./avian/api/birdnet-api.php?action=recent&hours=' + hours),
+        ]).then(function (parts) {
+          return { stats: parts[0], recent: parts[1] };
+        });
+      });
   }
 
   function refreshRecent(animate) {

@@ -114,6 +114,18 @@ def test_all_time_window_reuses_lifelist_without_recent_query():
     assert "action=stats" in fetch_live
 
 
+def test_live_poll_falls_back_to_legacy_stats_and_recent_endpoints():
+    source = read_apt()
+    fetch_live = source[source.index("function fetchLiveData") : source.index("function refreshRecent")]
+
+    assert "action=live&hours=" in fetch_live
+    assert "!live.stats || !live.recent" in fetch_live
+    assert ".catch(function ()" in fetch_live
+    assert "action=stats" in fetch_live
+    assert "action=recent&hours=" in fetch_live
+    assert "return { stats: parts[0], recent: parts[1] };" in fetch_live
+
+
 def test_mask_and_dimension_manifests_have_matching_valid_entries():
     masks = json.loads((FRONTEND / "masks.json").read_text(encoding="utf-8"))
     dims = json.loads((FRONTEND / "dims.json").read_text(encoding="utf-8"))
@@ -176,3 +188,14 @@ def test_decoded_masks_use_typed_arrays_and_constant_time_hit_testing():
     hit_test = source[source.index("function maskHitTest") : source.index("collage.addEventListener('mousemove'")]
     assert "mask.bits" in hit_test
     assert "t.mask._set" not in hit_test
+
+
+def test_species_without_a_rebuilt_mask_use_a_visible_fallback():
+    source = read_apt()
+    assert "var FALLBACK_MASK" in source
+    assert "cells: new Uint16Array([0, 0])" in source
+    assert "bits: new Uint8Array([128])" in source
+
+    render = source[source.index("function renderCollage") : source.index("// Staggered centre-out entrance")]
+    assert "if (!mask) mask = FALLBACK_MASK;" in render
+    assert "if (!mask) return null;" not in render
