@@ -317,8 +317,11 @@ not remove the source checkout under `/opt/avian-visitors/src`.
 - Audio recordings and BirdNET-generated spectrogram PNGs stay on the Orange Pi.
 - AvianVisitors bundled images, frontend files, and optional generated image
   cache stay on the web host.
-- Admin/control endpoints are not proxied by this mode. Use the Orange Pi URL
-  directly for service restarts and BirdNET configuration changes.
+- Admin/control endpoints are not proxied by this mode. The web-host menu hides
+  `settings`, `system`, `logs`, and `tools` because those screens require local
+  access to `birdnet.conf`, systemd, and the journal. Use the Orange Pi URL
+  directly for service restarts, logs, diagnostics, and BirdNET configuration
+  changes.
 
 ## Safety notes
 

@@ -81,3 +81,11 @@ def test_remote_proxy_endpoint_cannot_be_selected_by_request_input():
     assert "preg_match('/^[A-Za-z0-9._-]+\\.php$/', $endpoint)" in source
     assert "$_GET" not in source
     assert "CURLOPT_FOLLOWLOCATION => false" in source
+
+
+def test_split_web_host_menu_hides_local_admin_controls():
+    source = read("menu.php")
+    assert "getenv('AV_BIRDNET_API_BASE')" in source
+    assert "if (!$splitWebHost)" in source
+    assert "'items' => $items" in source
+    assert "'split-web-host'" in source
