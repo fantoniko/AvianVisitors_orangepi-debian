@@ -7,6 +7,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 WEB_ROOT="/srv/avian-visitors"
 WEB_BIND="127.0.0.1:8080"
 BIRDNET_API_BASE=""
+BIRDNET_ORIGIN=""
 ALLOW_EXTERNAL_WEB_BIND=0
 DRY_RUN=0
 SKIP_PACKAGES=0
@@ -80,6 +81,13 @@ case "$BIRDNET_API_BASE" in
   http://*|https://*) ;;
   *) die "--birdnet-api-base must start with http:// or https://" ;;
 esac
+birdnet_scheme="${BIRDNET_API_BASE%%://*}"
+birdnet_authority="${BIRDNET_API_BASE#*://}"
+birdnet_authority="${birdnet_authority%%/*}"
+case "$birdnet_authority" in
+  ''|*@*|*\?*|*\#*) die "--birdnet-api-base must contain a plain host[:port] without credentials" ;;
+esac
+BIRDNET_ORIGIN="$birdnet_scheme://$birdnet_authority"
 case "$WEB_ROOT" in
   /*) ;;
   *) die "--web-root must be an absolute path" ;;
@@ -193,6 +201,7 @@ sed \
   -e "s/__AV_WEB_PORT__/$(sed_escape "$bind_port")/g" \
   -e "s/__AV_WEB_ROOT__/$(sed_escape "$WEB_ROOT")/g" \
   -e "s/__AV_PHP_FPM_SOCKET__/$(sed_escape "$socket")/g" \
+  -e "s/__AV_BIRDNET_ORIGIN__/$(sed_escape "$BIRDNET_ORIGIN")/g" \
   "$SCRIPT_DIR/config/caddy.Caddyfile.template" > "$site_tmp"
 if [ "$DRY_RUN" = "1" ]; then
   printf 'DRY-RUN: write %s\n' "$caddy_site"
@@ -296,6 +305,7 @@ fi
 log "web host prepared"
 log "web URL: http://$WEB_BIND/"
 log "smoke test: curl 'http://127.0.0.1:$bind_port/avian/api/birdnet-api.php?action=stats'"
+log "live audio: http://127.0.0.1:$bind_port/stream -> $BIRDNET_ORIGIN/stream"
 if [ "$ENABLE_IMAGE_WORKER" = "1" ]; then
   log "image worker timer: systemctl status avian-visitors-image-worker.timer --no-pager"
   log "manual image worker run: sudo systemctl start avian-visitors-image-worker.service"

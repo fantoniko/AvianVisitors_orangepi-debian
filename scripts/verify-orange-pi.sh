@@ -14,7 +14,7 @@ PI_API_URL="http://127.0.0.1:8079/avian/api"
 BIRDS_DB="/home/avianvisitors/BirdNET-Pi/scripts/birds.db"
 
 # Remove a service only when you intentionally did not deploy it.
-REQUIRED_SERVICES="caddy birdnet-recording birdnet-analysis birdnet-stats livestream spectrogram-viewer"
+REQUIRED_SERVICES="caddy birdnet-recording birdnet-analysis birdnet-stats icecast2 livestream spectrogram-viewer"
 
 ###############################################################################
 
@@ -44,6 +44,20 @@ http_check() {
   fi
 }
 
+stream_check() {
+  local title="$1" url="$2" headers="$TMP_DIR/stream-headers" body="$TMP_DIR/stream-body"
+  local status content_type
+  curl -sS --connect-timeout 3 --max-time 5 -D "$headers" -o "$body" "$url" 2>"$body.err" || true
+  status=$(awk '/^HTTP\// { code=$2 } END { print code }' "$headers" 2>/dev/null | tr -d '\r')
+  content_type=$(awk 'tolower($1) == "content-type:" { type=$2 } END { print type }' "$headers" 2>/dev/null | tr -d '\r')
+  if [ "$status" = 200 ] && [ "$content_type" = "audio/mpeg" ] && [ -s "$body" ]; then
+    ok "$title (HTTP 200 audio/mpeg)"
+  else
+    bad "$title (HTTP ${status:-000}, ${content_type:-no content type})"
+    [ -s "$body.err" ] && sed 's/^/           /' "$body.err"
+  fi
+}
+
 printf 'AvianVisitors Orange Pi verification\nAPI: %s\n\n' "$PI_API_URL"
 
 echo "=== System services ==="
@@ -61,6 +75,7 @@ echo "=== Local API and database ==="
 if command -v curl >/dev/null 2>&1; then
   http_check "Local stats endpoint" "$PI_API_URL/birdnet-api.php?action=stats" '"totals"'
   http_check "Local recent endpoint" "$PI_API_URL/birdnet-api.php?action=recent&hours=24" '"species"'
+  stream_check "Local live audio endpoint" "${PI_API_URL%/avian/api}/stream"
 else
   bad "curl is installed"
 fi

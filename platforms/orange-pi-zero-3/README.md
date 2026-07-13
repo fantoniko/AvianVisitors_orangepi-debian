@@ -117,7 +117,19 @@ configure Icecast deliberately before enabling it:
 
 ```bash
 sudo apt-get install icecast2
+sudoedit /etc/icecast2/icecast.xml
+sudo systemctl enable --now icecast2.service
+sudo systemctl enable --now livestream.service
+curl --max-time 5 -D - http://127.0.0.1:8079/stream -o /dev/null
 ```
+
+In `icecast.xml`, keep the listen socket bound to `127.0.0.1` and set
+`source-password` to the same value as `ICE_PWD` in
+`/etc/birdnet/birdnet.conf`. A healthy check returns `HTTP 200` and
+`Content-Type: audio/mpeg`; the curl timeout is expected because a live stream
+does not finish. If `livestream.service` reports that the ALSA device is busy,
+both recording consumers need a shared ALSA capture PCM (for example a tested
+`dsnoop` PCM) instead of an exclusive `hw:` device.
 
 ## Audio test
 

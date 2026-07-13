@@ -1799,7 +1799,7 @@
         liveEl.addEventListener('error', function () {
           if (settled) return;
           settled = true;
-          reject(new Error('stream error - check /#admin=system'));
+          reject(new Error('live stream unavailable on Orange Pi'));
         });
         audioClaim(stopAudio);   // stop any card / modal-recording audio
         liveEl.play().catch(function (e) {

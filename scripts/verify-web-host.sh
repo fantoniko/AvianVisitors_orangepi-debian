@@ -44,6 +44,20 @@ http_check() {
   fi
 }
 
+stream_check() {
+  local title="$1" url="$2" headers="$TMP_DIR/stream-headers" body="$TMP_DIR/stream-body"
+  local status content_type
+  curl -sS --connect-timeout 3 --max-time 5 -D "$headers" -o "$body" "$url" 2>"$body.err" || true
+  status=$(awk '/^HTTP\// { code=$2 } END { print code }' "$headers" 2>/dev/null | tr -d '\r')
+  content_type=$(awk 'tolower($1) == "content-type:" { type=$2 } END { print type }' "$headers" 2>/dev/null | tr -d '\r')
+  if [ "$status" = 200 ] && [ "$content_type" = "audio/mpeg" ] && [ -s "$body" ]; then
+    ok "$title (HTTP 200 audio/mpeg)"
+  else
+    bad "$title (HTTP ${status:-000}, ${content_type:-no content type})"
+    if [ -s "$body.err" ]; then sed 's/^/           /' "$body.err"; fi
+  fi
+}
+
 service_id() {
   docker ps -aq \
     --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
@@ -109,6 +123,7 @@ else
   http_check "Web proxy stats endpoint" "$WEB_URL/avian/api/birdnet-api.php?action=stats" '"totals"'
   http_check "Web proxy recent endpoint" "$WEB_URL/avian/api/birdnet-api.php?action=recent&hours=24" '"species"'
   http_check "Web proxy timeseries endpoint" "$WEB_URL/avian/api/birdnet-api.php?action=timeseries&days=7" '"daily"'
+  stream_check "Live audio proxy" "$WEB_URL/stream"
 fi
 
 echo

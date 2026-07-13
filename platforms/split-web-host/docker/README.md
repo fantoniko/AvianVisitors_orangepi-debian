@@ -84,6 +84,10 @@ AV_CUTOUTS_VOLUME_NAME=avian-visitors-cutouts
 AV_RUNTIME_VOLUME_NAME=avian-visitors-runtime
 ```
 
+The web container derives `http://op3.lc:8079` from
+`AV_BIRDNET_API_BASE` and proxies `/stream` to the Orange Pi with streaming
+flush enabled. No second host variable is required.
+
 Set `AV_HOST_UID` and `AV_HOST_GID` to the Linux owner of the checkout on the
 Docker host. On the host:
 
@@ -113,6 +117,7 @@ Smoke tests:
 ```sh
 curl 'http://hs.lc:8080/avian/api/birdnet-api.php?action=stats'
 curl 'http://hs.lc:8080/avian/api/birdnet-api.php?action=recent&hours=24'
+curl --max-time 5 -D - 'http://hs.lc:8080/stream' -o /dev/null
 docker compose logs -f avian-worker
 ```
 

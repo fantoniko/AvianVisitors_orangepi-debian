@@ -16,6 +16,12 @@
     file_server
   }
 
+  handle /stream {
+    reverse_proxy {$AV_BIRDNET_ORIGIN} {
+      flush_interval -1
+    }
+  }
+
   handle /avian/api/*.php {
     root * /srv/app
     php_fastcgi avian-php:9000

@@ -5,7 +5,8 @@ BirdNET-Pi keeps running on an Orange Pi.
 
 It installs Caddy/PHP packages, creates the AvianVisitors web root, links the
 frontend and `avian/api`, configures a dedicated PHP-FPM pool with
-`AV_BIRDNET_API_BASE`, and imports a Caddy site.
+`AV_BIRDNET_API_BASE`, imports a Caddy site, and streams `/stream` from the
+Orange Pi origin derived from that API URL.
 
 ## Install
 
@@ -53,7 +54,12 @@ at night.
 
 ```sh
 curl 'http://127.0.0.1:8080/avian/api/birdnet-api.php?action=stats'
+curl --max-time 5 -D - 'http://127.0.0.1:8080/stream' -o /dev/null
 ```
+
+The stream check should return `HTTP 200` with `Content-Type: audio/mpeg`.
+Icecast and `livestream.service` must be active on the Orange Pi; the web host
+does not capture audio itself.
 
 ## Uninstall
 

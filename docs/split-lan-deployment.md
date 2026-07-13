@@ -239,6 +239,22 @@ proxies to the Orange Pi:
 - `avian/api/recording.php`
 - `avian/api/spectrogram.php`
 
+Caddy also proxies the continuous live-audio route directly, without passing
+the unbounded response through PHP:
+
+- `/stream` -> the Orange Pi origin's `/stream`
+
+Verify it from the web host. A healthy stream returns `HTTP 200`,
+`Content-Type: audio/mpeg`, and then keeps the request open:
+
+```sh
+curl --max-time 5 -D - 'http://127.0.0.1:8080/stream' -o /dev/null
+```
+
+This requires `icecast2.service` and `livestream.service` to be active on the
+Orange Pi. Keep Icecast bound to loopback; the Orange Pi Caddy exposes its
+`/stream` route on port 8079.
+
 The browser still talks to the web host using same-origin URLs, so no CORS
 configuration is needed. Bundled bird illustrations and cutouts are still
 served locally by the web host.
