@@ -195,7 +195,19 @@ def test_species_without_a_rebuilt_mask_use_a_visible_fallback():
     assert "var FALLBACK_MASK" in source
     assert "cells: new Uint16Array([0, 0])" in source
     assert "bits: new Uint8Array([128])" in source
+    assert "function buildRuntimeMask(slug, img)" in source
+
+    runtime_start = source.index("function buildRuntimeMask")
+    runtime_mask = source[runtime_start : source.index("function loadMask", runtime_start)]
+    assert "93 / Math.max(naturalW, naturalH)" in runtime_mask
+    assert "pixels[i * 4 + 3] > 127" in runtime_mask
+    assert "new Uint8Array" in runtime_mask
+    assert "new Uint16Array" in runtime_mask
+    assert "DIMS[slug]" in runtime_mask
+    assert "renderCollageFromData(false);" in runtime_mask
 
     render = source[source.index("function renderCollage") : source.index("// Staggered centre-out entrance")]
     assert "if (!mask) mask = FALLBACK_MASK;" in render
     assert "if (!mask) return null;" not in render
+    assert "imgEl.addEventListener('load'" in render
+    assert "buildRuntimeMask(r.slug, imgEl);" in render

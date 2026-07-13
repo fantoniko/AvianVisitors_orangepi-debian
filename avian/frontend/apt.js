@@ -291,6 +291,72 @@
     cells: new Uint16Array([0, 0]),
     bits: new Uint8Array([128]),
   };
+  var runtimeMaskState = {};
+  var runtimeMaskRenderTimer = null;
+
+  function buildRuntimeMask(slug, img) {
+    if (maskCache[slug] || runtimeMaskState[slug]) return;
+    var naturalW = img.naturalWidth, naturalH = img.naturalHeight;
+    if (!naturalW || !naturalH) return;
+    runtimeMaskState[slug] = 'building';
+
+    // Match build_masks.py so a newly generated PNG gets the same packing
+    // quality immediately, without waiting for the hourly worker. The canvas
+    // is tiny (long edge <= 93px) and is released after this function returns.
+    var scale = 93 / Math.max(naturalW, naturalH);
+    var w = Math.max(1, Math.round(naturalW * scale));
+    var h = Math.max(1, Math.round(naturalH * scale));
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) { runtimeMaskState[slug] = 'failed'; return; }
+
+    var pixels;
+    try {
+      ctx.drawImage(img, 0, 0, w, h);
+      pixels = ctx.getImageData(0, 0, w, h).data;
+    } catch (error) {
+      // A future cross-origin image source could taint the canvas. Keep the
+      // visible bounding-box fallback instead of retrying on every render.
+      runtimeMaskState[slug] = 'failed';
+      console.warn('runtime mask failed', slug, error);
+      return;
+    }
+
+    var bits = new Uint8Array(Math.ceil(w * h / 8));
+    var opaque = 0;
+    for (var i = 0; i < w * h; i++) {
+      if (pixels[i * 4 + 3] > 127) {
+        bits[i >> 3] |= 1 << (7 - (i & 7));
+        opaque++;
+      }
+    }
+    if (!opaque) { runtimeMaskState[slug] = 'failed'; return; }
+
+    var cells = new Uint16Array(opaque * 2);
+    var ci = 0;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var pi = y * w + x;
+        if ((bits[pi >> 3] >> (7 - (pi & 7))) & 1) {
+          cells[ci++] = x; cells[ci++] = y;
+        }
+      }
+    }
+
+    maskCache[slug] = { w: w, h: h, cells: cells, bits: bits };
+    var dimScale = 560 / Math.max(naturalW, naturalH);
+    DIMS[slug] = [Math.round(naturalW * dimScale), Math.round(naturalH * dimScale)];
+    runtimeMaskState[slug] = 'ready';
+
+    // Several new species normally finish loading together. Debounce them into
+    // one quiet relayout so the flock settles once instead of jumping per bird.
+    clearTimeout(runtimeMaskRenderTimer);
+    runtimeMaskRenderTimer = setTimeout(function () {
+      renderCollageFromData(false);
+    }, 80);
+  }
+
   function loadMask(slug) {
     if (maskCache[slug]) return maskCache[slug];
     var rec = MASKS[slug];
@@ -513,7 +579,7 @@
       var d = DIMS[slug];
       var n = +s.n; if (!n || isNaN(n)) n = 1;
       return {
-        mask: mask, data: s, pose: pose,
+        mask: mask, data: s, pose: pose, slug: slug,
         ar: d ? d[0] / d[1] : 1.4,
         score: Math.pow(Math.max(1, n), T.countExp),
       };
@@ -625,7 +691,17 @@
       btn.style.top    = r.y + 'px';
       btn.style.width  = r.fullW + 'px';
       btn.style.height = r.fullH + 'px';
-      btn.innerHTML = '<img loading="lazy" decoding="async" src="' + img + '" alt="' + s.com + '">';
+      var imgEl = document.createElement('img');
+      imgEl.loading = 'lazy';
+      imgEl.decoding = 'async';
+      imgEl.alt = s.com || s.sci;
+      if (r.mask === FALLBACK_MASK && runtimeMaskState[r.slug] !== 'failed') {
+        imgEl.addEventListener('load', function () {
+          buildRuntimeMask(r.slug, imgEl);
+        }, { once: true });
+      }
+      imgEl.src = img;
+      btn.appendChild(imgEl);
       r.el = btn;
       collage.appendChild(btn);
     });
