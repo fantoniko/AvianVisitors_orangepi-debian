@@ -211,3 +211,10 @@ def test_species_without_a_rebuilt_mask_use_a_visible_fallback():
     assert "if (!mask) return null;" not in render
     assert "imgEl.addEventListener('load'" in render
     assert "buildRuntimeMask(r.slug, imgEl);" in render
+
+
+def test_collage_frequency_weighting_is_gentle_and_capped():
+    source = read_apt()
+    assert "countExp: 0.18" in source
+    assert "maxCountScore: 2.25" in source
+    assert "Math.min(T.maxCountScore, Math.pow(Math.max(1, n), T.countExp))" in source

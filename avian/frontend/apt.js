@@ -256,10 +256,13 @@
                           n <= 12 ? 0.40 :
                           n <= 24 ? 0.34 :
                                     0.28,
-      // Count -> area exponent. ~0.65 keeps the visual hierarchy
-      // legible (n=400 reads ~5× bigger than n=30) without the
-      // loudest bird drowning everything else.
-      countExp: 0.65,
+      // Count -> area weighting. Frequency should add a little hierarchy,
+      // not let one very common species take over the plate. The shallow
+      // exponent differentiates nearby counts; the cap bounds the frequency-
+      // driven linear-size ratio to sqrt(2.25) = 1.5, even when one bird has
+      // orders of magnitude more detections than the rest.
+      countExp: 0.18,
+      maxCountScore: 2.25,
       // Floor: every species in the dataset must be visible, even
       // n=1. Tracks species count so a tiny rare bird stays
       // recognisable on a crowded plate.
@@ -558,10 +561,9 @@
     var budget  = vpArea * T.packingBudgetFrac;
     var minArea = vpArea * T.minTileAreaFrac;
 
-    // Step 1: build tiles + assign each a count-weighted SCORE (not a
-    // final area yet). area-from-count uses a sub-linear exponent so
-    // a 400-detection bird is visibly larger than a 30-detection bird
-    // without dwarfing it.
+    // Step 1: build tiles + assign each a gently count-weighted SCORE (not a
+    // final area yet). The cap prevents a single extremely frequent species
+    // from dominating the composition.
     var tiles = items.map(function (s) {
       var base = slugify(s.sci);
       // Pose: perched by default, rarely flight (FLY_PROB), and only if a
@@ -581,7 +583,7 @@
       return {
         mask: mask, data: s, pose: pose, slug: slug,
         ar: d ? d[0] / d[1] : 1.4,
-        score: Math.pow(Math.max(1, n), T.countExp),
+        score: Math.min(T.maxCountScore, Math.pow(Math.max(1, n), T.countExp)),
       };
     }).filter(Boolean);
     // Reroll on re-entry: forget pose choices for species no longer in window.
