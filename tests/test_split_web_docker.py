@@ -93,6 +93,35 @@ def test_worker_runtime_bounds_native_thread_pools():
         assert f"export {variable}=" in source
 
 
+def test_generated_volumes_are_not_nested_below_mutable_app_volume():
+    for compose_path in (
+        ROOT / "portainer-compose.yaml",
+        DOCKER / "compose.yaml",
+    ):
+        compose = compose_path.read_text(encoding="utf-8")
+        for volume in ("illustrations", "references", "cutouts"):
+            assert compose.count(f"- avian-{volume}:/srv/generated/{volume}") == 4
+            assert f"- avian-{volume}:/srv/app/avian/assets/{volume}" not in compose
+        assert compose.count("- avian-runtime:/srv/generated/runtime") == 2
+        assert "- avian-runtime:/srv/app/avian/runtime" not in compose
+
+    init = read("app-init.sh")
+    assert "ln -s /srv/generated/illustrations /srv/app/avian/assets/illustrations" in init
+    assert "ln -s /srv/generated/references /srv/app/avian/assets/references" in init
+    assert "ln -s /srv/generated/cutouts /srv/app/avian/assets/cutouts" in init
+    assert "ln -s /srv/generated/runtime /srv/app/avian/runtime" in init
+
+
+def test_runtime_healthchecks_detect_detached_generated_paths():
+    for compose_path in (
+        ROOT / "portainer-compose.yaml",
+        DOCKER / "compose.yaml",
+    ):
+        compose = compose_path.read_text(encoding="utf-8")
+        assert compose.count("test -d /srv/app/avian/assets/illustrations") == 2
+        assert "test -w /srv/app/avian/assets/illustrations" in compose
+
+
 def test_php_image_is_small_and_fpm_releases_idle_workers():
     source = read("php.Dockerfile")
     assert "FROM php:8.3-fpm-alpine" in source

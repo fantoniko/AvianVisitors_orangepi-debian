@@ -38,5 +38,25 @@ copy_dir /srv/app/avian/runtime /srv/generated/runtime
 clear_app_volume
 cp -a /image-app/. /srv/app/
 
+# Keep persistent volumes outside the app volume and expose them through
+# symlinks. Mounting them directly below /srv/app is unsafe during rolling
+# redeploys: clear_app_volume can replace the parent directory while an older
+# runtime container is still alive, leaving Docker's nested mount unreachable
+# even though it remains listed by `docker inspect`.
+mkdir -p /srv/app/avian/assets \
+  /srv/generated/illustrations \
+  /srv/generated/references \
+  /srv/generated/cutouts \
+  /srv/generated/runtime
+rm -rf \
+  /srv/app/avian/assets/illustrations \
+  /srv/app/avian/assets/references \
+  /srv/app/avian/assets/cutouts \
+  /srv/app/avian/runtime
+ln -s /srv/generated/illustrations /srv/app/avian/assets/illustrations
+ln -s /srv/generated/references /srv/app/avian/assets/references
+ln -s /srv/generated/cutouts /srv/app/avian/assets/cutouts
+ln -s /srv/generated/runtime /srv/app/avian/runtime
+
 commit="$(tr -d '\r\n' < /image-app/SOURCE_COMMIT 2>/dev/null || printf 'unknown')"
 printf 'avian app volume refreshed; source_commit=%s; generated assets remain in dedicated volumes\n' "$commit"

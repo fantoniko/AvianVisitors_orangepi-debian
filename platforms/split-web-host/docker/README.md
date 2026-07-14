@@ -195,6 +195,11 @@ across updates. On the first deploy after enabling these volumes,
 layout, then clears that legacy checkout. This avoids repeated copying of large
 generated assets during normal redeploys.
 
+Runtime containers mount those persistent volumes under `/srv/generated`.
+`avian-app-init` recreates the application-facing paths as symlinks after each
+code refresh. Keeping the mounts outside `/srv/app` prevents a rolling redeploy
+from detaching a nested asset mount when the mutable app volume is cleared.
+
 New bundled files from Git are copied into their matching asset volume before
 legacy files, so user-generated files keep precedence when names overlap.
 Tracked files such as `apt.js` are refreshed from Git. If a preserved
