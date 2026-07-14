@@ -1,7 +1,7 @@
 *
 !avian/
 !avian/scripts/
-!avian/scripts/requirements.txt
+!avian/scripts/**
 !platforms/
 !platforms/split-web-host/
 !platforms/split-web-host/docker/

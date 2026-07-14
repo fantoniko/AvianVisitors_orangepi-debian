@@ -3,7 +3,7 @@
 //
 // Lookup chain for /avian/api/cutout.php?sci=Calypte+anna:
 //   1. ../assets/illustrations/<slug>.png   (generated illustration)
-//   2. cached rembg of a Wikipedia photo at $HOME/BirdSongs/Extracted/cutouts/
+//   2. ../assets/cutouts/<slug>.png         (persistent Wikipedia/rembg cache)
 //   3. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
 //
 // The frontend's <img src> points here for every species. Generated
@@ -39,10 +39,30 @@ if ($pose < 1 || $pose > 99) $pose = 1;
 $poseSuffix = $pose === 1 ? '' : "-$pose";
 
 function serve_png(string $path): void {
+    $size = (int)filesize($path);
+    $mtime = (int)filemtime($path);
+    $etag = '"' . dechex($mtime) . '-' . dechex($size) . '"';
     header('Content-Type: image/png');
-    header('Cache-Control: public, max-age=86400');
-    header('Content-Length: ' . (string)filesize($path));
+    // Worker-generated files can change without a frontend release. Keep a
+    // short freshness window and revalidate cheaply using file metadata.
+    header('Cache-Control: public, max-age=300, must-revalidate');
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+    if (trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) {
+        http_response_code(304);
+        exit;
+    }
+    header('Content-Length: ' . (string)$size);
     readfile($path);
+    exit;
+}
+
+function missing_image(string $message): void {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    // Do not retain a negative result: the worker may create the PNG shortly.
+    header('Cache-Control: no-store');
+    echo $message;
     exit;
 }
 
@@ -54,13 +74,10 @@ if (is_file($illustration) && filesize($illustration) > 1024) {
 // Do not silently substitute the perched render for a missing flight pose.
 // The frontend probes this endpoint and hides an unavailable pose on 404.
 if ($pose !== 1) {
-    http_response_code(404);
-    header('Content-Type: text/plain');
-    echo 'requested pose is unavailable';
-    exit;
+    missing_image('requested pose is unavailable');
 }
 // 2. Dynamic cache from a previous Wikipedia + rembg run.
-$cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';
+$cacheDir = dirname(__DIR__) . '/assets/cutouts';
 $cachePath = "$cacheDir/$slug.png";
 if (is_file($cachePath) && filesize($cachePath) > 1024) {
     serve_png($cachePath);
@@ -71,9 +88,7 @@ if (is_file($cachePath) && filesize($cachePath) > 1024) {
 //    burning a Wikipedia request we can't use.
 $rembg = '/usr/local/bin/rembg-cli';
 if (!is_executable($rembg)) {
-    http_response_code(404);
-    echo 'no generated illustration for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)';
-    exit;
+    missing_image('no generated illustration for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)');
 }
 
 if (!is_dir($cacheDir)) @mkdir($cacheDir, 0755, true);
@@ -101,9 +116,7 @@ if ($srcUrl !== null) {
     }
 }
 if (!$srcUrl) {
-    http_response_code(404);
-    echo 'no Wikipedia photo for ' . htmlspecialchars($sci);
-    exit;
+    missing_image('no Wikipedia photo for ' . htmlspecialchars($sci));
 }
 
 $imgBytes = @file_get_contents($srcUrl, false, $ctx);

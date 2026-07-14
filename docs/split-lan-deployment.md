@@ -132,8 +132,9 @@ Orange Pi API.
 
 The web host can also run the image pipeline automatically. This watches recent
 BirdNET detections through the web-host API, renders only missing species with
-OpenClaw, removes the flat generated background, rebuilds masks, and bumps the
-frontend cache versions when masks changed.
+OpenClaw, removes the flat generated background, and stores transparent PNGs.
+The browser derives temporary masks for newly generated images; bundled mask
+manifests can be refreshed separately during a later source release.
 
 Keep the OpenClaw credentials in the project, not globally:
 

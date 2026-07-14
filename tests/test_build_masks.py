@@ -76,11 +76,10 @@ def test_strip_embedded_tables_keeps_executable_declarations(tmp_path):
     assert apt.read_text(encoding="utf-8") == "  var DIMS = {};\n  var MASKS = {};\n"
 
 
-def test_automatic_worker_tracks_external_manifest_changes():
+def test_automatic_worker_does_not_mutate_immutable_frontend():
     source = WORKER_PATH.read_text(encoding="utf-8")
-    assert "def load_mask_slugs(dims_path: Path)" in source
-    assert 'dims_manifest = repo / "avian" / "frontend" / "dims.json"' in source
-    assert 'masks_manifest = repo / "avian" / "frontend" / "masks.json"' in source
-    assert "before_manifests" in source
-    assert "after_manifests" in source
-    assert "load_apt_slugs" not in source
+    assert "def load_mask_slugs" not in source
+    assert "def bump_cache_versions" not in source
+    assert 'repo / "avian" / "frontend"' not in source
+    assert 'repo / "avian" / "scripts" / "build_masks.py"' not in source
+    assert 'repo / "avian" / "assets" / "illustrations"' in source

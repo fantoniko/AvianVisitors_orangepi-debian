@@ -11,18 +11,17 @@ http://op3.lc:8079/avian/api
 
 The Docker host runs:
 
-- `avian-app-init`: copies the Git checkout from the build context into the
-  shared `avian-app` Docker volume;
-- `avian-web`: Caddy, exposed on `AV_WEB_PORT` (default `8080`);
-- `avian-php`: PHP-FPM for `/avian/api/*.php`;
+- `avian-web`: Caddy with the frontend and API routing files baked into its
+  image, exposed on `AV_WEB_PORT` (default `8080`);
+- `avian-php`: PHP-FPM with the API code baked into its image;
 - `avian-worker`: periodic OpenClaw generation, background removal, and mask
-  rebuilds.
+  preparation.
 
-`avian-web` bakes the Caddyfile into its image. The repository checkout is
-copied into a named Docker volume instead of bind-mounted from Portainer's
-internal `/data/compose/...` directory. Generated illustrations, reference
-photos, and worker runtime state live in separate fixed-name volumes so they
-survive service updates and stack re-creation.
+Application code is immutable and lives in the service images. It is neither
+bind-mounted from Portainer's internal `/data/compose/...` directory nor copied
+through a shared application volume. Generated illustrations, reference photos,
+cutouts, model data, and worker runtime state live in separate fixed-name
+volumes so they survive service updates and stack re-creation.
 
 For Portainer, the root stack pulls prebuilt multi-architecture images from
 GitHub Container Registry instead of building them on the web host. The nested
@@ -42,9 +41,10 @@ root-level file because some Portainer versions intermittently fail to read
 nested stack files during Git redeploys.
 
 The `web-deploy` branch is generated automatically after matching source
-changes. It contains only the web application, Docker configuration, and this
-stack file, keeping Portainer's Git checkout small. The workflow first pushes
-the matching GHCR images and only then updates `web-deploy`.
+changes. It contains only the Portainer stack file, license, and source commit
+marker, keeping Portainer's Git checkout small. Application code and Docker
+configuration are already inside the GHCR images. The workflow first pushes
+the matching images and only then updates `web-deploy`.
 
 If the GHCR packages are private, add a Portainer registry credential for
 `ghcr.io` with a GitHub token that has `read:packages`, then select it for this
@@ -88,8 +88,9 @@ The web container derives `http://op3.lc:8079` from
 `AV_BIRDNET_API_BASE` and proxies `/stream` to the Orange Pi with streaming
 flush enabled. No second host variable is required.
 
-Set `AV_HOST_UID` and `AV_HOST_GID` to the Linux owner of the checkout on the
-Docker host. On the host:
+`AV_HOST_UID` and `AV_HOST_GID` are only used when
+`AV_IMAGE_WORKER_CHOWN=1`. For that optional mode, set them to the desired
+Linux owner of exported generated files:
 
 ```sh
 id -u
@@ -128,9 +129,13 @@ The worker loops forever. Each run:
 1. reads recent species from `AV_RECENT_API_URL` or the internal web URL;
 2. renders only missing perched and in-flight illustrations through OpenClaw;
 3. runs `cutout.py` for generated non-transparent images;
-4. runs `build_masks.py`;
-5. bumps frontend cache versions if masks changed;
-6. sleeps `AV_IMAGE_WORKER_INTERVAL_SECONDS`.
+4. stores transparent PNGs in the persistent illustrations volume;
+5. sleeps `AV_IMAGE_WORKER_INTERVAL_SECONDS`.
+
+The worker does not modify frontend JavaScript or bundled mask manifests.
+Those files belong to the immutable web image. For a newly generated PNG, the
+browser derives the alpha mask at runtime; bundled `dims.json` and `masks.json`
+can still be refreshed during a later source release with `build_masks.py`.
 
 By default the worker waits `AV_IMAGE_WORKER_START_DELAY_SECONDS=300` before
 the first run. This keeps ordinary Portainer redeploys from immediately
@@ -179,32 +184,28 @@ docker ps --format 'table {{.Names}}\t{{.Status}}' | grep avian
 
 Expected steady state:
 
-- `avian-app-init`: exited `0`;
 - `avian-web`: running and healthy;
 - `avian-php`: running and healthy;
 - `avian-worker`: running and healthy.
 
 ## Updating the stack
 
-When Portainer redeploys the stack, `avian-app-init` refreshes the `avian-app`
-volume from the current Git revision. Generated `avian/assets/illustrations/`
-PNGs, cached `avian/assets/references/`, legacy `avian/assets/cutouts/`, and
-`avian/runtime/` state are mounted from fixed-name volumes and are preserved
-across updates. On the first deploy after enabling these volumes,
-`avian-app-init` migrates matching files from an older all-in-one `avian-app`
-layout, then clears that legacy checkout. This avoids repeated copying of large
-generated assets during normal redeploys.
+Portainer pulls new immutable web, PHP, and worker images. Generated
+`avian/assets/illustrations/` PNGs, cached `avian/assets/references/`,
+`avian/assets/cutouts/`, model files, and `avian/runtime/` state remain in their
+fixed-name volumes and are preserved across updates.
 
-Runtime containers mount those persistent volumes under `/srv/generated`.
-`avian-app-init` recreates the application-facing paths as symlinks after each
-code refresh. Keeping the mounts outside `/srv/app` prevents a rolling redeploy
-from detaching a nested asset mount when the mutable app volume is cleared.
+The PHP and worker containers mount only the persistent volumes they use under
+`/srv/generated`. Their images contain application-facing symlinks such as
+`/srv/app/avian/assets/illustrations -> /srv/generated/illustrations`. Keeping
+the mounts outside `/srv/app` prevents a code refresh from replacing or
+detaching an asset mount.
 
-New bundled files from Git are copied into their matching asset volume before
-legacy files, so user-generated files keep precedence when names overlap.
-Tracked files such as `apt.js` are refreshed from Git. If a preserved
-transparent PNG is no longer present in `apt.js` after that refresh, the worker
-rebuilds masks without re-running background removal.
+The obsolete stack-local `avian-app` volume is no longer used. After the first
+successful deployment and after verifying that old generated files are present
+in the fixed-name volumes, it may be removed manually. Do not remove the named
+`avian-visitors-illustrations`, `avian-visitors-references`,
+`avian-visitors-cutouts`, `avian-visitors-runtime`, or U2Net volumes.
 
 ## Stop only automatic generation
 

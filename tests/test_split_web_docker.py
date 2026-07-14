@@ -65,20 +65,21 @@ def test_native_split_installer_renders_live_audio_origin():
 
 
 def test_docker_build_contexts_are_narrow():
-    assert read("web.Dockerfile.dockerignore").splitlines()[0] == "*"
-    assert read("php.Dockerfile.dockerignore").strip() == "*"
-
     web_ignore = read("web.Dockerfile.dockerignore")
+    assert web_ignore.splitlines()[0] == "*"
+    assert "!avian/frontend/**" in web_ignore
+    assert "!avian/api/**" in web_ignore
+    assert "!avian/assets/favicon.png" in web_ignore
     assert "!platforms/split-web-host/docker/web-entrypoint.sh" in web_ignore
+
+    php_ignore = read("php.Dockerfile.dockerignore")
+    assert php_ignore.startswith("*\n")
+    assert "!avian/api/**" in php_ignore
 
     worker_ignore = read("worker.Dockerfile.dockerignore")
     assert worker_ignore.startswith("*\n")
-    assert "!avian/scripts/requirements.txt" in worker_ignore
+    assert "!avian/scripts/**" in worker_ignore
     assert "!avian/assets/" not in worker_ignore
-
-    app_ignore = read("app.Dockerfile.dockerignore")
-    assert app_ignore.startswith("*\n")
-    assert "!avian/**" in app_ignore
 
 
 def test_worker_runtime_bounds_native_thread_pools():
@@ -93,23 +94,44 @@ def test_worker_runtime_bounds_native_thread_pools():
         assert f"export {variable}=" in source
 
 
-def test_generated_volumes_are_not_nested_below_mutable_app_volume():
+def test_services_bake_code_and_only_generated_data_uses_volumes():
     for compose_path in (
         ROOT / "portainer-compose.yaml",
         DOCKER / "compose.yaml",
     ):
         compose = compose_path.read_text(encoding="utf-8")
-        for volume in ("illustrations", "references", "cutouts"):
-            assert compose.count(f"- avian-{volume}:/srv/generated/{volume}") == 4
+        assert "avian-app-init" not in compose
+        assert "avian-app:/srv/app" not in compose
+        assert "  avian-app:" not in compose
+        expected_mounts = {
+            "illustrations": 2,
+            "references": 1,
+            "cutouts": 1,
+        }
+        for volume, count in expected_mounts.items():
+            assert compose.count(f"- avian-{volume}:/srv/generated/{volume}") == count
             assert f"- avian-{volume}:/srv/app/avian/assets/{volume}" not in compose
-        assert compose.count("- avian-runtime:/srv/generated/runtime") == 2
+        assert compose.count("- avian-runtime:/srv/generated/runtime") == 1
         assert "- avian-runtime:/srv/app/avian/runtime" not in compose
 
-    init = read("app-init.sh")
-    assert "ln -s /srv/generated/illustrations /srv/app/avian/assets/illustrations" in init
-    assert "ln -s /srv/generated/references /srv/app/avian/assets/references" in init
-    assert "ln -s /srv/generated/cutouts /srv/app/avian/assets/cutouts" in init
-    assert "ln -s /srv/generated/runtime /srv/app/avian/runtime" in init
+    assert not (DOCKER / "app-init.sh").exists()
+    assert not (DOCKER / "app.Dockerfile").exists()
+
+    web = read("web.Dockerfile")
+    assert "COPY avian/frontend /srv/app/avian/frontend" in web
+    assert "COPY avian/api /srv/app/avian/api" in web
+
+    php = read("php.Dockerfile")
+    assert "COPY avian/api /srv/app/avian/api" in php
+
+    worker = read("worker.Dockerfile")
+    assert "COPY avian/scripts /srv/app/avian/scripts" in worker
+
+    for source in (php, worker):
+        assert "ln -s /srv/generated/illustrations /srv/app/avian/assets/illustrations" in source
+    assert "/srv/generated" not in web
+    assert "/srv/generated/references" not in php
+    assert "/srv/generated/cutouts" not in worker
 
 
 def test_runtime_healthchecks_detect_detached_generated_paths():
@@ -118,7 +140,7 @@ def test_runtime_healthchecks_detect_detached_generated_paths():
         DOCKER / "compose.yaml",
     ):
         compose = compose_path.read_text(encoding="utf-8")
-        assert compose.count("test -d /srv/app/avian/assets/illustrations") == 2
+        assert compose.count("test -d /srv/app/avian/assets/illustrations") == 1
         assert "test -w /srv/app/avian/assets/illustrations" in compose
 
 

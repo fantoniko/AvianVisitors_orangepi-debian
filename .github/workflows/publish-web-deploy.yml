@@ -35,22 +35,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Build and publish app initializer
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: platforms/split-web-host/docker/app.Dockerfile
-          build-args: |
-            SOURCE_COMMIT=${{ github.sha }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/avian-visitors-app-init:web-deploy
-            ghcr.io/${{ github.repository_owner }}/avian-visitors-app-init:sha-${{ github.sha }}
-          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=avian-app-init
-          cache-to: type=gha,mode=max,scope=avian-app-init
-
       - name: Build and publish PHP
         uses: docker/build-push-action@v6
         with:
@@ -101,9 +85,7 @@ jobs:
 
       - name: Assemble minimal Portainer checkout
         run: |
-          mkdir -p deploy/platforms/split-web-host/docker
-          cp -a avian deploy/avian
-          cp -a platforms/split-web-host/docker/. deploy/platforms/split-web-host/docker/
+          mkdir -p deploy
           cp portainer-compose.yaml deploy/
           cp LICENSE deploy/
           printf '%s\n' "${GITHUB_SHA}" > deploy/SOURCE_COMMIT

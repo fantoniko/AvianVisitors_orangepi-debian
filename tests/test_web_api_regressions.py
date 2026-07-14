@@ -89,3 +89,12 @@ def test_split_web_host_menu_hides_local_admin_controls():
     assert "if (!$splitWebHost)" in source
     assert "'items' => $items" in source
     assert "'split-web-host'" in source
+
+
+def test_cutout_resolver_revalidates_generated_images_and_never_caches_misses():
+    source = read("cutout.php")
+    assert "dirname(__DIR__) . '/assets/cutouts'" in source
+    assert "Cache-Control: public, max-age=300, must-revalidate" in source
+    assert "header('ETag: ' . $etag)" in source
+    assert "HTTP_IF_NONE_MATCH" in source
+    assert "Cache-Control: no-store" in source

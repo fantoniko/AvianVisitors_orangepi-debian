@@ -1,30 +1,13 @@
 name: avian-visitors
 
 services:
-  avian-app-init:
-    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-app-init:${AV_IMAGE_TAG:-web-deploy}
-    environment:
-      TZ: ${TZ:-Europe/Moscow}
-    volumes:
-      - avian-app:/srv/app
-      - avian-illustrations:/srv/generated/illustrations
-      - avian-references:/srv/generated/references
-      - avian-cutouts:/srv/generated/cutouts
-      - avian-runtime:/srv/generated/runtime
-    restart: "no"
-
   avian-php:
     image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-php:${AV_IMAGE_TAG:-web-deploy}
-    depends_on:
-      avian-app-init:
-        condition: service_completed_successfully
     environment:
       AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
       TZ: ${TZ:-Europe/Moscow}
     volumes:
-      - avian-app:/srv/app
       - avian-illustrations:/srv/generated/illustrations:ro
-      - avian-references:/srv/generated/references:ro
       - avian-cutouts:/srv/generated/cutouts:ro
     healthcheck:
       test: ["CMD-SHELL", "test -f /srv/app/avian/api/birdnet-api.php && test -d /srv/app/avian/assets/illustrations && php -v >/dev/null"]
@@ -43,13 +26,8 @@ services:
     environment:
       AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
       TZ: ${TZ:-Europe/Moscow}
-    volumes:
-      - avian-app:/srv/app:ro
-      - avian-illustrations:/srv/generated/illustrations:ro
-      - avian-references:/srv/generated/references:ro
-      - avian-cutouts:/srv/generated/cutouts:ro
     healthcheck:
-      test: ["CMD-SHELL", "test -d /srv/app/avian/assets/illustrations && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      test: ["CMD-SHELL", "test -f /srv/app/avian/api/birdnet-api.php && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -85,10 +63,8 @@ services:
       OPENCLAW_MODEL: ${OPENCLAW_MODEL:-openclaw-image}
       U2NET_HOME: /root/.u2net
     volumes:
-      - avian-app:/srv/app
       - avian-illustrations:/srv/generated/illustrations
       - avian-references:/srv/generated/references
-      - avian-cutouts:/srv/generated/cutouts
       - avian-runtime:/srv/generated/runtime
       - avian-u2net:/root/.u2net
     healthcheck:
@@ -100,7 +76,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  avian-app:
   avian-illustrations:
     name: ${AV_ILLUSTRATIONS_VOLUME_NAME:-avian-visitors-illustrations}
   avian-references:

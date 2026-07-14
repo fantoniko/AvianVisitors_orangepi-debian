@@ -2,9 +2,10 @@
 """Generate missing illustrations for recently detected birds.
 
 This is intended for the split LAN web host. It reads the proxied BirdNET
-`recent` API, renders only missing species, removes the generated background,
-rebuilds frontend masks, and bumps the frontend cache versions when masks
-actually changed.
+`recent` API, renders only missing species, and removes the generated
+background. Frontend code is immutable in container deployments; the browser
+derives temporary masks directly from new PNGs until the bundled manifests are
+updated in a later release.
 """
 from __future__ import annotations
 
@@ -139,15 +140,6 @@ def is_transparent_png(path: Path) -> bool:
         return im.getchannel("A").getextrema()[0] == 0
 
 
-def load_mask_slugs(dims_path: Path) -> set[str]:
-    if not dims_path.exists():
-        return set()
-    try:
-        return set(json.loads(dims_path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError):
-        return set()
-
-
 def run(cmd: list[str], *, input_text: str | None = None) -> None:
     print("+ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, input=input_text, text=True, check=True)
@@ -168,19 +160,6 @@ def run_with_signal_retries(cmd: list[str], *, retries: int, delay: float) -> No
                 flush=True,
             )
             time.sleep(max(0, delay))
-
-
-def bump_cache_versions(apt: Path) -> None:
-    src = apt.read_text()
-
-    def repl(match: re.Match[str]) -> str:
-        name, num = match.group(1), int(match.group(2))
-        return f"var {name} = 'r{num + 1}'"
-
-    new = re.sub(r"var (SKETCH_VERSION|IMG_VERSION) = 'r(\d+)'", repl, src)
-    if new == src:
-        raise RuntimeError(f"could not bump SKETCH_VERSION/IMG_VERSION in {apt}")
-    apt.write_text(new)
 
 
 def main() -> int:
@@ -235,10 +214,6 @@ def main() -> int:
     repo = args.repo.resolve()
     load_env_file(repo / ".env.openclaw")
     illustrations = repo / "avian" / "assets" / "illustrations"
-    apt = repo / "avian" / "frontend" / "apt.js"
-    dims_manifest = repo / "avian" / "frontend" / "dims.json"
-    masks_manifest = repo / "avian" / "frontend" / "masks.json"
-    mask_slugs = load_mask_slugs(dims_manifest)
     state_path = args.state or repo / "avian" / "runtime" / "image-worker-state.json"
     state = load_state(state_path)
     now = utc_now()
@@ -282,7 +257,6 @@ def main() -> int:
             "skipped_cooldown": 0,
             "missing_species": 0,
             "cutout_slugs": 0,
-            "mask_rebuild": False,
         }
         if not species:
             print("no recent species returned by API")
@@ -292,7 +266,6 @@ def main() -> int:
 
         missing = []
         needs_cutout = []
-        needs_mask_rebuild = False
         for sci, com in species:
             base = slugify(sci)
             if failure_retry_active(state, base, now):
@@ -307,8 +280,6 @@ def main() -> int:
                     break
                 if not is_transparent_png(path):
                     needs_cutout.append(slug)
-                elif slug not in mask_slugs:
-                    needs_mask_rebuild = True
 
         stats["missing_species"] = len(missing)
         if missing:
@@ -349,7 +320,7 @@ def main() -> int:
 
         needs_cutout = sorted(set(needs_cutout))
         stats["cutout_slugs"] = len(needs_cutout)
-        if not missing and not needs_cutout and not needs_mask_rebuild:
+        if not missing and not needs_cutout:
             print("all recent species already have transparent illustrations")
             state["last_run"] = {"at": iso(now), "status": "ok", "stats": stats}
             for slug in seen_slugs:
@@ -388,40 +359,6 @@ def main() -> int:
                 write_state(state_path, state)
                 raise
 
-        if args.active_start is not None and not is_active_window(
-                args.active_start, args.active_end):
-            print("[schedule] active window ended; deferring mask rebuild")
-            state["last_run"] = {
-                "at": iso(utc_now()),
-                "status": "deferred",
-                "reason": "active window ended before mask rebuild",
-                "stats": stats,
-            }
-            write_state(state_path, state)
-            return 0
-
-        before_manifests = tuple(
-            path.read_bytes() if path.exists() else b""
-            for path in (dims_manifest, masks_manifest)
-        )
-        try:
-            run([py, str(repo / "avian" / "scripts" / "build_masks.py")])
-        except subprocess.CalledProcessError as exc:
-            reason = f"build_masks exited {exc.returncode}"
-            state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
-                                 "error": reason}
-            write_state(state_path, state)
-            raise
-        after_manifests = tuple(
-            path.read_bytes() if path.exists() else b""
-            for path in (dims_manifest, masks_manifest)
-        )
-        if after_manifests != before_manifests:
-            bump_cache_versions(apt)
-            stats["mask_rebuild"] = True
-            print("frontend masks changed; bumped SKETCH_VERSION and IMG_VERSION")
-        else:
-            print("frontend masks unchanged")
         for slug in seen_slugs:
             if (illustrations / f"{slug}.png").exists() and is_transparent_png(illustrations / f"{slug}.png"):
                 clear_failure(state, slug)
