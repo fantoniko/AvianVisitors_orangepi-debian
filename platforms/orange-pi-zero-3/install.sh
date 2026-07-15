@@ -421,6 +421,9 @@ install_units() {
 
   if [ "$DRY_RUN" = "0" ]; then
     usermod -aG audio "$APP_USER" || true
+    if getent group systemd-journal >/dev/null 2>&1; then
+      usermod -aG systemd-journal "$APP_USER" || true
+    fi
   fi
 
   run_cmd systemctl daemon-reload
@@ -515,6 +518,7 @@ $APP_USER ALL=(root) NOPASSWD: \\
     /bin/systemctl start avian-visitors-admin-helper@restart-livestream.service, \\
     /bin/systemctl start avian-visitors-admin-helper@restart-stats.service, \\
     /bin/systemctl start avian-visitors-admin-helper@restart-spectrogram.service, \\
+    /bin/systemctl start avian-visitors-admin-helper@restart-icecast2.service, \\
     /bin/systemctl start avian-visitors-admin-helper@status.service
 EOF
   if [ "$DRY_RUN" = "0" ]; then

@@ -2651,8 +2651,9 @@
     var stream = sys.stream_data || {}, db = sys.birds_db || {};
     var streamAlert = !stream.exists || stream.newest_age_s == null || stream.newest_age_s > 600;
     var dbAlert = db.exists && db.modified_s > 3600;
-    var keySvcs = ['birdnet_recording', 'birdnet_analysis', 'birdnet_log'];
-    var dead = keySvcs.filter(function (n) { return svc[n] && svc[n].active !== 'active'; });
+    var keySvcs = ['birdnet-recording', 'birdnet-analysis'];
+    var dead = keySvcs.filter(function (n) { return !svc[n] || svc[n].active !== 'active'; });
+    var restartable = ['birdnet-recording','birdnet-analysis','birdnet-stats','spectrogram-viewer','livestream','icecast2'];
     var html = '<div class="admin-grid">';
     html += adminCard('recording pipeline', dead.length === 0 ? 'live' : (dead.length + ' down'),
       dead.length === 0 ? 'all services active' : dead.join(', '),
@@ -2698,7 +2699,9 @@
         + '<td><span class="pill ' + pill + '">' + adminEsc(s.active) + '</span></td>'
         + '<td>' + adminEsc(s.enabled) + '</td>'
         + '<td>' + adminEsc(s.since || '-') + '</td>'
-        + '<td><button class="restart" data-unit="' + adminEsc(name) + '">restart</button></td>'
+        + '<td>' + (restartable.indexOf(name) >= 0
+          ? '<button class="restart" data-unit="' + adminEsc(name) + '">restart</button>'
+          : '') + '</td>'
         + '</tr>';
     });
     html += '</tbody></table>';
@@ -2740,7 +2743,7 @@
   }
 
   function renderAdminLogs() {
-    var unit = 'birdnet_recording', lines = 120, autoScroll = true;
+    var unit = 'birdnet-recording', lines = 120, autoScroll = true;
     adminBody.innerHTML =
       '<div class="admin-logs-toolbar">'
       + '  <label>unit</label><select id="adminLogsUnit">'
@@ -2748,7 +2751,7 @@
       // 8.4 on Trixie). List all three so the dropdown has the right one
       // regardless of host - birdnet-status.php's ALLOWED_UNITS already
       // skips ones systemd doesn't know about.
-      + ['birdnet_recording','birdnet_analysis','birdnet_log','birdnet_stats','spectrogram_viewer','livestream','icecast2','caddy','php8.4-fpm','php8.3-fpm','php8.2-fpm']
+      + ['birdnet-recording','birdnet-analysis','birdnet-stats','spectrogram-viewer','livestream','icecast2','caddy','php8.4-fpm','php8.3-fpm','php8.2-fpm']
           .map(function (u) { return '<option value="' + u + '">' + u + '</option>'; }).join('')
       + '  </select>'
       + '  <label>lines</label><input id="adminLogsLines" type="number" value="120" min="20" max="500" step="20">'
@@ -2782,10 +2785,10 @@
 
   function renderAdminTools() {
     var actions = [
-      ['restart birdnet_recording', 'picks up live audio from the mic. restart this first if detections stall.', 'birdnet_recording'],
-      ['restart birdnet_analysis',  'runs the neural net on recorded chunks. restart if detections are stuck.', 'birdnet_analysis'],
-      ['restart birdnet_log',       'writes the sqlite db. restart if api/stats stops updating.', 'birdnet_log'],
-      ['restart spectrogram_viewer','live fft view (legacy) - used by /birdnet/spectrogram.', 'spectrogram_viewer'],
+      ['restart birdnet-recording', 'picks up live audio from the mic. restart this first if detections stall.', 'birdnet-recording'],
+      ['restart birdnet-analysis',  'runs the neural net on recorded chunks. restart if detections are stuck.', 'birdnet-analysis'],
+      ['restart birdnet-stats',     'refreshes aggregate detection statistics.', 'birdnet-stats'],
+      ['restart spectrogram-viewer','live fft view used by /birdnet/spectrogram.', 'spectrogram-viewer'],
       ['restart livestream',        'icecast feed for the drawer live-audio button.', 'livestream'],
       ['restart icecast2',          'web audio streaming server (fronts livestream).', 'icecast2'],
     ];

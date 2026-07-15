@@ -12,7 +12,9 @@ WorkingDirectory=__AV_PREFIX__
 Environment=HOME=__AV_HOME__
 EnvironmentFile=/etc/birdnet/birdnet.conf
 ExecStart=__AV_PREFIX__/birdnet/bin/python3 __AV_PREFIX__/scripts/birdnet_analysis.py
-Restart=on-failure
+# birdnet_analysis.py deliberately exits cleanly when its inotify stream
+# stalls so systemd can rebuild the watcher. Restart even for that exit 0.
+Restart=always
 RestartSec=10
 TimeoutStopSec=30
 NoNewPrivileges=true

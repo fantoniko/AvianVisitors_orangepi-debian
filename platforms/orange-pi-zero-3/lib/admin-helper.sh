@@ -19,6 +19,9 @@ case "$action" in
   restart-spectrogram)
     exec /bin/systemctl restart spectrogram-viewer.service
     ;;
+  restart-icecast2)
+    exec /bin/systemctl restart icecast2.service
+    ;;
   status)
     exec /bin/systemctl status --no-pager birdnet-recording.service birdnet-analysis.service livestream.service birdnet-stats.service spectrogram-viewer.service
     ;;

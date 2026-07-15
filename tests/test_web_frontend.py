@@ -218,3 +218,11 @@ def test_collage_frequency_weighting_is_gentle_and_capped():
     assert "countExp: 0.18" in source
     assert "maxCountScore: 2.25" in source
     assert "Math.min(T.maxCountScore, Math.pow(Math.max(1, n), T.countExp))" in source
+
+
+def test_admin_controls_use_orange_pi_systemd_unit_names():
+    source = read_apt()
+    assert "'birdnet-recording'" in source
+    assert "'birdnet-analysis'" in source
+    assert "'birdnet_recording'" not in source
+    assert "'birdnet_analysis'" not in source

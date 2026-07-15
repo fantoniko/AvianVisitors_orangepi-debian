@@ -79,7 +79,9 @@ def test_admin_helper_sudoers_is_exact_allowlist():
     assert "www-data ALL=" not in install
     assert "caddy ALL=" not in install
     assert "avian-visitors-admin-helper@restart-recording.service" in install
+    assert "avian-visitors-admin-helper@restart-icecast2.service" in install
     assert "avian-visitors-admin-helper@status.service" in install
+    assert 'usermod -aG systemd-journal "$APP_USER"' in install
 
 
 def test_managed_prefix_requires_marker_for_removal():
@@ -154,7 +156,10 @@ def test_systemd_units_have_required_safety_properties():
         if unit.name == "avian-visitors-admin-helper.service.in":
             continue
         assert "ExecStart=__AV_PREFIX__/" in text
-        assert "Restart=on-failure" in text
+        if unit.name == "birdnet-analysis.service.in":
+            assert "Restart=always" in text
+        else:
+            assert "Restart=on-failure" in text
         assert "TimeoutStopSec=" in text
         assert "User=__AV_USER__" in text
         assert "NoNewPrivileges=true" in text
@@ -166,6 +171,17 @@ def test_recording_unit_allows_alsa_character_devices():
     recording = read("systemd/birdnet-recording.service.in")
     assert "DeviceAllow=char-alsa rw" in recording
     assert "DeviceAllow=/dev/snd/" not in recording
+
+
+def test_livestream_unit_allows_alsa_character_devices():
+    livestream = read("systemd/livestream.service.in")
+    assert "DeviceAllow=char-alsa rw" in livestream
+    assert "DeviceAllow=/dev/snd/" not in livestream
+
+
+def test_analysis_unit_restarts_after_clean_watcher_exit():
+    analysis = read("systemd/birdnet-analysis.service.in")
+    assert "Restart=always" in analysis
 
 
 def test_split_web_host_installer_files_exist():

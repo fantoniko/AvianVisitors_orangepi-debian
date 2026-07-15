@@ -91,6 +91,20 @@ def test_split_web_host_menu_hides_local_admin_controls():
     assert "'split-web-host'" in source
 
 
+def test_orange_pi_status_api_uses_deployed_units_and_constrained_helper():
+    status = read("birdnet-status.php")
+    config = read("config.php")
+    allowed = status[status.index("const ALLOWED_UNITS") : status.index("function services_status")]
+    assert "'birdnet-recording'" in allowed
+    assert "'birdnet-analysis'" in allowed
+    assert "'birdnet_recording'" not in allowed
+    assert "'birdnet_analysis'" not in allowed
+    assert "avian-visitors-admin-helper@" in status
+    assert "sudo /bin/systemctl restart" not in status
+    assert "avian-visitors-admin-helper@" in config
+    assert "sudo /bin/systemctl restart" not in config
+
+
 def test_cutout_resolver_revalidates_generated_images_and_never_caches_misses():
     source = read("cutout.php")
     assert "dirname(__DIR__) . '/assets/cutouts'" in source
