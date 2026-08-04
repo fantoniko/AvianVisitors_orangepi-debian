@@ -2,13 +2,12 @@
 // AvianVisitors - bird image resolver.
 //
 // Lookup chain for /avian/api/cutout.php?sci=Calypte+anna:
-//   1. ../assets/illustrations/<slug>.png   (450+ bundled kachō-e renders)
-//   2. ../assets/cutouts/<slug>.png         (background-removed photo)
-//   3. cached rembg of a Wikipedia photo at $HOME/BirdSongs/Extracted/cutouts/
-//   4. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
+//   1. ../assets/illustrations/<slug>.png   (generated illustration)
+//   2. ../assets/cutouts/<slug>.png         (persistent Wikipedia/rembg cache)
+//   3. fresh Wikipedia -> rembg -> cache (skipped gracefully if rembg unset)
 //
-// The frontend's <img src> points here for every species - bundled
-// hits return instantly; cold misses fall through to the dynamic path.
+// The frontend's <img src> points here for every species. Generated
+// illustrations return instantly; cold misses fall through to the dynamic path.
 //
 // Default LAN deploy ships without auth. To expose publicly, gate
 // /avian/api/* with basic_auth in your Caddyfile - see avian/forwarding/.
@@ -40,49 +39,56 @@ if ($pose < 1 || $pose > 99) $pose = 1;
 $poseSuffix = $pose === 1 ? '' : "-$pose";
 
 function serve_png(string $path): void {
+    $size = (int)filesize($path);
+    $mtime = (int)filemtime($path);
+    $etag = '"' . dechex($mtime) . '-' . dechex($size) . '"';
     header('Content-Type: image/png');
-    header('Cache-Control: public, max-age=86400');
-    header('Content-Length: ' . (string)filesize($path));
+    // Worker-generated files can change without a frontend release. Keep a
+    // short freshness window and revalidate cheaply using file metadata.
+    header('Cache-Control: public, max-age=300, must-revalidate');
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+    if (trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) {
+        http_response_code(304);
+        exit;
+    }
+    header('Content-Length: ' . (string)$size);
     readfile($path);
     exit;
 }
 
-// 1. Bundled illustration with pose suffix (the kachō-e PNG the repo
-//    ships with). 450+ species cover both perched + flight.
-$bundled = dirname(__DIR__) . "/assets/illustrations/{$slug}{$poseSuffix}.png";
-if (is_file($bundled) && filesize($bundled) > 1024) {
-    serve_png($bundled);
-}
-// Pose-2 missing? Fall back to pose-1 so the flight tab still shows
-// the perched render instead of breaking to the photo fallback.
-if ($pose !== 1) {
-    $fallback = dirname(__DIR__) . "/assets/illustrations/$slug.png";
-    if (is_file($fallback) && filesize($fallback) > 1024) {
-        serve_png($fallback);
-    }
-}
-// 2. Bundled cutout (background-removed photo, fallback for species
-//    without an illustration).
-$cutout = dirname(__DIR__) . "/assets/cutouts/$slug.png";
-if (is_file($cutout) && filesize($cutout) > 1024) {
-    serve_png($cutout);
+function missing_image(string $message): void {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    // Do not retain a negative result: the worker may create the PNG shortly.
+    header('Cache-Control: no-store');
+    echo $message;
+    exit;
 }
 
-// 3. Dynamic cache from a previous Wikipedia + rembg run.
-$cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';
+// 1. Generated illustration with pose suffix.
+$illustration = dirname(__DIR__) . "/assets/illustrations/{$slug}{$poseSuffix}.png";
+if (is_file($illustration) && filesize($illustration) > 1024) {
+    serve_png($illustration);
+}
+// Do not silently substitute the perched render for a missing flight pose.
+// The frontend probes this endpoint and hides an unavailable pose on 404.
+if ($pose !== 1) {
+    missing_image('requested pose is unavailable');
+}
+// 2. Dynamic cache from a previous Wikipedia + rembg run.
+$cacheDir = dirname(__DIR__) . '/assets/cutouts';
 $cachePath = "$cacheDir/$slug.png";
 if (is_file($cachePath) && filesize($cachePath) > 1024) {
     serve_png($cachePath);
 }
 
-// 4. Fresh Wikipedia fetch + rembg. Skipped if rembg-cli isn't on
+// 3. Fresh Wikipedia fetch + rembg. Skipped if rembg-cli isn't on
 //    PATH - the resolver returns a 404 in that case rather than
 //    burning a Wikipedia request we can't use.
 $rembg = '/usr/local/bin/rembg-cli';
 if (!is_executable($rembg)) {
-    http_response_code(404);
-    echo 'no illustration bundled for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)';
-    exit;
+    missing_image('no generated illustration for ' . htmlspecialchars($sci) . ' (install rembg-cli to enable Wikipedia fallback)');
 }
 
 if (!is_dir($cacheDir)) @mkdir($cacheDir, 0755, true);
@@ -110,9 +116,7 @@ if ($srcUrl !== null) {
     }
 }
 if (!$srcUrl) {
-    http_response_code(404);
-    echo 'no Wikipedia photo for ' . htmlspecialchars($sci);
-    exit;
+    missing_image('no Wikipedia photo for ' . htmlspecialchars($sci));
 }
 
 $imgBytes = @file_get_contents($srcUrl, false, $ctx);

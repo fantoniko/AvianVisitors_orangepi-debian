@@ -1,0 +1,30 @@
+[Unit]
+Description=AvianVisitors BirdNET analysis
+After=network-online.target birdnet-recording.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__AV_USER__
+Group=__AV_USER__
+SupplementaryGroups=audio
+WorkingDirectory=__AV_PREFIX__
+Environment=HOME=__AV_HOME__
+EnvironmentFile=/etc/birdnet/birdnet.conf
+ExecStart=__AV_PREFIX__/birdnet/bin/python3 __AV_PREFIX__/scripts/birdnet_analysis.py
+# birdnet_analysis.py deliberately exits cleanly when its inotify stream
+# stalls so systemd can rebuild the watcher. Restart even for that exit 0.
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__AV_HOME__/BirdSongs __AV_PREFIX__ /tmp
+DeviceAllow=/dev/snd/ r
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+[Install]
+WantedBy=multi-user.target

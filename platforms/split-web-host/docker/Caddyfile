@@ -1,0 +1,40 @@
+:8080 {
+  encode zstd gzip
+
+  @maskManifests path /dims.json /masks.json
+  header @maskManifests Cache-Control "public, max-age=31536000, immutable"
+
+  handle /favicon.png {
+    root * /srv/app
+    rewrite * /avian/assets/favicon.png
+    file_server
+  }
+
+  handle /favicon.ico {
+    root * /srv/app
+    rewrite * /avian/assets/favicon.png
+    file_server
+  }
+
+  handle /stream {
+    reverse_proxy {$AV_BIRDNET_ORIGIN} {
+      flush_interval -1
+    }
+  }
+
+  handle /avian/api/*.php {
+    root * /srv/app
+    php_fastcgi avian-php:9000
+  }
+
+  handle /avian/* {
+    root * /srv/app
+    file_server
+  }
+
+  handle {
+    root * /srv/app/avian/frontend
+    try_files {path} /index.html
+    file_server
+  }
+}

@@ -5,7 +5,7 @@
 //
 // Endpoints (?action=...):
 //   system    - uptime / load / disk / mem / temp / audio device / db file age
-//   services  - status of every birdnet_* unit + caddy + php-fpm
+//   services  - status of the Orange Pi BirdNET units + caddy + php-fpm
 //   logs      - &unit=<name>&lines=N: last N lines of that unit's journal
 //   restart   - GET/POST &unit=<name>: restart a single service (whitelisted)
 //   diag      - everything in one go (system + services + recent logs)
@@ -14,10 +14,8 @@
 // Forwarded deploy:  set AV_REQUIRE_AUTH=1 (env) AND configure Caddy
 // basic_auth on /avian/api/ to gate everything.
 //
-// Service restart + journalctl need passwordless sudo for the caddy
-// user that runs php-fpm. install_services.sh drops the matching
-// sudoers rule at /etc/sudoers.d/020_avian-admin with an explicit
-// command allowlist.
+// Service restarts go through the constrained Orange Pi admin helper.
+// The installer adds the PHP-FPM user to systemd-journal for read-only logs.
 
 declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
@@ -181,18 +179,25 @@ function read_conf_summary(string $p): array {
 // Includes both 8.2 and 8.4 php-fpm so older Debian + Trixie both report
 // the right unit name; missing units come back as "inactive (not-found)".
 const ALLOWED_UNITS = [
-    'birdnet_recording',
-    'birdnet_analysis',
-    'birdnet_log',
-    'birdnet_stats',
-    'spectrogram_viewer',
+    'birdnet-recording',
+    'birdnet-analysis',
+    'birdnet-stats',
+    'spectrogram-viewer',
     'livestream',
-    'chart_viewer',
     'icecast2',
     'caddy',
     'php8.4-fpm',
     'php8.3-fpm',
     'php8.2-fpm',
+];
+
+const RESTART_ACTIONS = [
+    'birdnet-recording'  => 'restart-recording',
+    'birdnet-analysis'   => 'restart-analysis',
+    'birdnet-stats'      => 'restart-stats',
+    'spectrogram-viewer' => 'restart-spectrogram',
+    'livestream'         => 'restart-livestream',
+    'icecast2'           => 'restart-icecast2',
 ];
 
 function services_status(): array {
@@ -223,7 +228,7 @@ function logs_for(string $unit, int $lines): array {
     }
     $lines = max(10, min(500, $lines));
     $out = shellout(
-        'sudo /bin/journalctl -u ' . escapeshellarg($unit) .
+        '/bin/journalctl -u ' . escapeshellarg($unit) .
         ' --no-pager -n ' . $lines . ' -o short-iso'
     );
     return [
@@ -259,7 +264,7 @@ switch ($action) {
     }
 
     case 'logs': {
-        $unit = (string)($_GET['unit'] ?? 'birdnet_recording');
+        $unit = (string)($_GET['unit'] ?? 'birdnet-recording');
         $lines = (int)($_GET['lines'] ?? 60);
         echo json_encode(logs_for($unit, $lines));
         break;
@@ -276,15 +281,14 @@ switch ($action) {
             break;
         }
         $unit = (string)($_GET['unit'] ?? '');
-        if (!in_array($unit, ALLOWED_UNITS, true)) {
+        if (!isset(RESTART_ACTIONS[$unit])) {
             http_response_code(400);
-            echo json_encode(['error' => 'unit not allowed', 'allowed' => ALLOWED_UNITS]);
+            echo json_encode(['error' => 'unit is not restartable', 'allowed' => array_keys(RESTART_ACTIONS)]);
             break;
         }
-        // Sudoers rule (dropped in by install_services.sh):
-        //   caddy ALL=(root) NOPASSWD: /bin/systemctl restart birdnet_*, ...
+        $helper = 'avian-visitors-admin-helper@' . RESTART_ACTIONS[$unit] . '.service';
         $rc = 0; $out = [];
-        exec('sudo /bin/systemctl restart ' . escapeshellarg($unit) . ' 2>&1', $out, $rc);
+        exec('sudo /bin/systemctl start ' . escapeshellarg($helper) . ' 2>&1', $out, $rc);
         echo json_encode([
             'unit' => $unit,
             'ok'   => $rc === 0,
@@ -297,13 +301,10 @@ switch ($action) {
     case 'diag': {
         // Everything a /system page wants in one fetch.
         $svc = services_status();
-        $key_units = ['birdnet_recording', 'birdnet_analysis'];
+        $key_units = ['birdnet-recording', 'birdnet-analysis'];
         $recent_logs = [];
         foreach ($key_units as $u) {
-            $recent_logs[$u] = trim(shellout(
-                'sudo /bin/journalctl -u ' . escapeshellarg($u) .
-                ' --no-pager -n 20 -o short-iso'
-            ));
+            $recent_logs[$u] = trim(logs_for($u, 20)['text']);
         }
         echo json_encode([
             'system'      => [

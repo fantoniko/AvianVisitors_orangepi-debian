@@ -195,6 +195,16 @@ CONFIDENCE=0.7
 
 SENSITIVITY=1.25
 
+## Generic multi-signal confirmation filter for reducing false positives.
+## Set DETECTION_FILTER_MODE=off to restore the legacy confidence-only logic.
+
+DETECTION_FILTER_MODE=balanced
+DETECTION_MIN_HITS=2
+DETECTION_RARE_MIN_HITS=3
+DETECTION_RARE_OCCURRENCE=0.08
+DETECTION_HIGH_CONFIDENCE=0.97
+DETECTION_MIN_MARGIN=0.10
+
 ## Configuration of the frequency shifting feature, useful for earing impaired people.
 
 ## FREQSHIFT_TOOL
@@ -218,6 +228,26 @@ FREQSHIFT_PITCH=-1500
 ## sound card supports.
 
 CHANNELS=2
+
+## ANALYSIS_HIGHPASS_HZ and ANALYSIS_LOWPASS_HZ optionally apply a light
+## zero-phase filter in memory before BirdNET inference. Keep a bound at 0 to
+## disable it. Start with a 150-250 Hz high-pass only for wind or electrical
+## rumble; do not use aggressive noise reduction before recognition.
+
+ANALYSIS_HIGHPASS_HZ=0
+ANALYSIS_LOWPASS_HZ=0
+
+## PLAYBACK_* settings affect the extracted clip served by the web interface,
+## not the model input. PLAYBACK_DENOISE_PROFILE is an optional SoX .prof file
+## created from a quiet recording; 0.21 is a deliberately gentle reduction.
+## The default narrow notches target 50 Hz mains hum and its measured harmonics.
+
+PLAYBACK_HIGHPASS_HZ=100
+PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_NOTCH_HZ=50,150,250
+PLAYBACK_NOTCH_Q=20
+PLAYBACK_DENOISE_PROFILE=
+PLAYBACK_DENOISE_AMOUNT=0.21
 
 ## PRIVACY_THRESHOLD can be set to enable sensitivity to Human sounds. This
 ## setting is an effort to introduce privacy into the data collection.

@@ -6,7 +6,7 @@
 // Endpoints:
 //   GET  -> returns current values as JSON.
 //   POST -> JSON body with any whitelisted key. Writes through to
-//           birdnet.conf and restarts birdnet_analysis + birdnet_recording
+//           birdnet.conf and restarts birdnet-analysis + birdnet-recording
 //           so the changes take effect immediately.
 //
 // Default LAN deploy: returns data immediately, no auth.
@@ -179,10 +179,14 @@ if ($method === 'POST') {
     }
     $restarted = [];
     if ($needsRestart) {
-        foreach (['birdnet_analysis', 'birdnet_recording'] as $svc) {
-            // Pre-baked sudoers rule: caddy NOPASSWD: /bin/systemctl restart birdnet_*
+        $restartActions = [
+            'birdnet-analysis' => 'restart-analysis',
+            'birdnet-recording' => 'restart-recording',
+        ];
+        foreach ($restartActions as $svc => $action) {
+            $helper = 'avian-visitors-admin-helper@' . $action . '.service';
             $rc = 0; $out = [];
-            exec('sudo /bin/systemctl restart ' . escapeshellarg($svc) . ' 2>&1', $out, $rc);
+            exec('sudo /bin/systemctl start ' . escapeshellarg($helper) . ' 2>&1', $out, $rc);
             $restarted[$svc] = $rc === 0;
         }
     }

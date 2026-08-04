@@ -82,6 +82,10 @@ class Basemodel:
     def get_species_list(self):
         return []
 
+    def get_species_occurrence_scores(self):
+        """Return geographic/seasonal occurrence scores keyed by scientific name."""
+        return {}
+
 
 class BirdNet(Basemodel):
     chunk_duration = 3
@@ -165,6 +169,10 @@ class BirdNetV2_4(BirdNet):
 
     def get_species_list(self):
         return self._mdata_model.get_species_list(self.labels)
+
+    def get_species_occurrence_scores(self):
+        details = self._mdata_model.get_species_list_details(self.labels)
+        return {label.split('_')[0]: float(score) for score, label in details}
 
 
 class Perch(Basemodel):

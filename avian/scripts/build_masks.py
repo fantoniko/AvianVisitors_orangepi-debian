@@ -3,23 +3,23 @@
 
 Step 3 of the illustration pipeline (after pregen.py and cutout.py).
 
-The collage packs birds by their actual silhouette, not bounding boxes,
-so the frontend ships a tiny 1-bit mask per illustration inlined in
-apt.js. This reads every cutout in avian/assets/illustrations/ and
-rewrites the DIMS and MASKS tables in avian/frontend/apt.js:
+The collage packs birds by their actual silhouette, not bounding boxes.
+This reads every cutout in avian/assets/illustrations/ and atomically
+rewrites the external frontend manifests:
 
-    DIMS[slug]  = [w, h]  aspect, scaled so the long side is 560
-    MASKS[slug] = {w, h, bits}  silhouette downscaled to <=93px, 1-bit
+    dims.json[slug]  = [w, h]  aspect, scaled so the long side is 560
+    masks.json[slug] = {w, h, bits}  silhouette downscaled to <=93px, 1-bit
                   packed MSB-first row-major, base64. A bit is 1 where
                   the cutout is opaque (alpha > 127). This is exactly
                   what loadMask() in apt.js decodes.
 
-Run after changing the illustration set, then bump SKETCH_VERSION and
-IMG_VERSION in apt.js so browsers drop their cached copies.
+Run after changing the illustration set. The automatic worker bumps
+SKETCH_VERSION and IMG_VERSION in apt.js when either manifest changes.
 
 Usage:
-    python3 build_masks.py            # rewrite apt.js in place
+    python3 build_masks.py            # rewrite dims.json + masks.json
     python3 build_masks.py --check    # report only, don't write
+    python3 build_masks.py --import-apt old-apt.js  # one-time migration
 """
 from __future__ import annotations
 import argparse
@@ -61,14 +61,49 @@ def build_tables(illus_dir: Path):
     return dims, masks
 
 
-def replace_decl(src: str, name: str, value: str) -> str:
-    """Replace `var <name> = {...};` (single line) with the new value."""
-    pat = re.compile(r"  var " + name + r" = \{.*?\};")
-    repl = f"  var {name} = {value};"
-    new, n = pat.subn(lambda _m: repl, src, count=1)
-    if n != 1:
-        raise SystemExit(f"error: could not find `var {name} = {{...}};` in apt.js")
-    return new
+def read_embedded_tables(apt_path: Path):
+    """Read legacy one-line DIMS/MASKS declarations for migration."""
+    src = apt_path.read_text(encoding="utf-8")
+    tables = []
+    for name in ("DIMS", "MASKS"):
+        match = re.search(r"var " + name + r" = (\{.*?\});", src)
+        if match is None:
+            raise SystemExit(f"error: could not find legacy var {name} in {apt_path}")
+        tables.append(json.loads(match.group(1)))
+    return tuple(tables)
+
+
+def strip_embedded_tables(apt_path: Path) -> None:
+    """Replace legacy payloads with empty runtime-populated tables."""
+    src = apt_path.read_text(encoding="utf-8")
+    for name in ("DIMS", "MASKS"):
+        src, replacements = re.subn(
+            r"  var " + name + r" = \{.*?\};",
+            f"  var {name} = {{}};",
+            src,
+            count=1,
+        )
+        if replacements != 1:
+            raise SystemExit(f"error: could not strip legacy var {name} in {apt_path}")
+    temporary = apt_path.with_name(apt_path.name + ".tmp")
+    temporary.write_text(src, encoding="utf-8")
+    temporary.replace(apt_path)
+
+
+def _atomic_write_json(path: Path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(
+        json.dumps(value, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def write_tables(dims_path: Path, masks_path: Path, dims, masks) -> None:
+    """Install complete manifests without exposing partially-written JSON."""
+    _atomic_write_json(dims_path, dims)
+    _atomic_write_json(masks_path, masks)
 
 
 def main() -> int:
@@ -77,30 +112,39 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--illustrations", type=Path, default=here / "assets" / "illustrations",
                     help="Cutout directory (default: avian/assets/illustrations/)")
-    ap.add_argument("--apt", type=Path, default=here / "frontend" / "apt.js",
-                    help="Frontend file to patch (default: avian/frontend/apt.js)")
+    ap.add_argument("--dims", type=Path, default=here / "frontend" / "dims.json",
+                    help="Dimension manifest (default: avian/frontend/dims.json)")
+    ap.add_argument("--masks", type=Path, default=here / "frontend" / "masks.json",
+                    help="Mask manifest (default: avian/frontend/masks.json)")
+    ap.add_argument("--import-apt", type=Path,
+                    help="Import legacy embedded DIMS/MASKS instead of reading illustrations")
+    ap.add_argument("--strip-embedded", action="store_true",
+                    help="After --import-apt, replace embedded payloads with empty tables")
     ap.add_argument("--check", action="store_true",
                     help="Report counts and don't write apt.js")
     args = ap.parse_args()
 
-    dims, masks = build_tables(args.illustrations)
+    if args.strip_embedded and not args.import_apt:
+        ap.error("--strip-embedded requires --import-apt")
+
+    if args.import_apt:
+        dims, masks = read_embedded_tables(args.import_apt)
+    else:
+        dims, masks = build_tables(args.illustrations)
     perched = sum(1 for k in dims if not k.endswith("-2"))
     flight = sum(1 for k in dims if k.endswith("-2"))
+    source = args.import_apt if args.import_apt else args.illustrations
     print(f"built {len(dims)} masks ({perched} perched + {flight} flight) "
-          f"from {args.illustrations}")
+          f"from {source}")
     if not dims:
         print("error: no cutouts found", file=sys.stderr)
         return 1
 
-    dims_json = json.dumps(dims, separators=(",", ":"))
-    masks_json = json.dumps(masks, separators=(",", ":"))
-
     if args.check:
-        src = args.apt.read_text()
-        cur = json.loads(re.search(r"var DIMS = (\{.*?\});", src).group(1))
-        added = sorted(set(dims) - set(cur))
-        removed = sorted(set(cur) - set(dims))
-        print(f"apt.js currently has {len(cur)} entries; "
+        current = json.loads(args.dims.read_text(encoding="utf-8")) if args.dims.exists() else {}
+        added = sorted(set(dims) - set(current))
+        removed = sorted(set(current) - set(dims))
+        print(f"dims.json currently has {len(current)} entries; "
               f"+{len(added)} new, -{len(removed)} removed")
         if added:
             print("  new:", ", ".join(added[:8]) + (" ..." if len(added) > 8 else ""))
@@ -108,11 +152,10 @@ def main() -> int:
             print("  gone:", ", ".join(removed[:8]) + (" ..." if len(removed) > 8 else ""))
         return 0
 
-    src = args.apt.read_text()
-    src = replace_decl(src, "DIMS", dims_json)
-    src = replace_decl(src, "MASKS", masks_json)
-    args.apt.write_text(src)
-    print(f"patched {args.apt}\nremember to bump SKETCH_VERSION + IMG_VERSION in apt.js")
+    write_tables(args.dims, args.masks, dims, masks)
+    if args.strip_embedded:
+        strip_embedded_tables(args.import_apt)
+    print(f"wrote {args.dims} and {args.masks}")
     return 0
 
 

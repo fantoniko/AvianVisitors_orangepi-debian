@@ -1,0 +1,13 @@
+*
+!avian/
+!avian/frontend/
+!avian/frontend/**
+!avian/api/
+!avian/api/**
+!avian/assets/
+!avian/assets/favicon.png
+!platforms/
+!platforms/split-web-host/
+!platforms/split-web-host/docker/
+!platforms/split-web-host/docker/Caddyfile
+!platforms/split-web-host/docker/web-entrypoint.sh

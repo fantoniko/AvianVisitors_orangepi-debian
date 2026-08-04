@@ -1,0 +1,108 @@
+################################################################################
+# Orange Pi Zero 3 / Debian configuration for AvianVisitors.
+# Installed by platforms/orange-pi-zero-3/install.sh.
+################################################################################
+
+SITE_NAME="AvianVisitors"
+TZ=Europe/Moscow
+
+LATITUDE=0.0000
+LONGITUDE=0.0000
+
+MODEL=BirdNET_GLOBAL_6K_V2.4_Model_FP16
+SF_THRESH=0.03
+DATA_MODEL_VERSION=1
+
+BIRDWEATHER_ID=
+CADDY_PWD=
+ICE_PWD=birdnetpi
+BIRDNETPI_URL=
+RTSP_STREAM=
+RTSP_STREAM_TO_LIVESTREAM="0"
+
+APPRISE_NOTIFICATION_TITLE="New BirdNET-Pi Detection"
+APPRISE_NOTIFY_EACH_DETECTION=0
+APPRISE_NOTIFY_NEW_SPECIES=0
+APPRISE_WEEKLY_REPORT=1
+APPRISE_NOTIFY_NEW_SPECIES_EACH_DAY=0
+APPRISE_MINIMUM_SECONDS_BETWEEN_NOTIFICATIONS_PER_SPECIES=0
+APPRISE_ONLY_NOTIFY_SPECIES_NAMES=""
+APPRISE_ONLY_NOTIFY_SPECIES_NAMES_2=""
+
+IMAGE_PROVIDER=WIKIPEDIA
+FLICKR_API_KEY=
+FLICKR_FILTER_EMAIL=
+INFO_SITE="ALLABOUTBIRDS"
+COLOR_SCHEME="light"
+
+FULL_DISK=purge
+PURGE_THRESHOLD=95
+MAX_FILES_SPECIES=0
+
+BIRDNET_USER=__AV_USER__
+RECS_DIR=__AV_HOME__/BirdSongs
+
+# Use an ALSA capture PCM from `arecord -L`, for example:
+#   REC_CARD=hw:CARD=Device,DEV=0
+# Keep `default` only if your Debian ALSA default points at the USB microphone.
+REC_CARD=default
+
+PROCESSED=__AV_HOME__/BirdSongs/Processed
+EXTRACTED=__AV_HOME__/BirdSongs/Extracted
+
+OVERLAP=0.0
+CONFIDENCE=0.7
+SENSITIVITY=1.25
+
+# Generic false-positive confirmation. Balanced mode accepts a species after
+# repeated top-ranked hits in one recording, or one exceptionally strong and
+# unambiguous hit. Geographically uncommon candidates need more confirmations.
+# This is species-agnostic and does not modify the recorded or playback audio.
+DETECTION_FILTER_MODE=balanced
+DETECTION_MIN_HITS=2
+DETECTION_RARE_MIN_HITS=3
+DETECTION_RARE_OCCURRENCE=0.08
+DETECTION_HIGH_CONFIDENCE=0.97
+DETECTION_MIN_MARGIN=0.10
+
+FREQSHIFT_TOOL=sox
+FREQSHIFT_HI=6000
+FREQSHIFT_LO=3000
+FREQSHIFT_RECONNECT_DELAY=4000
+FREQSHIFT_PITCH=-1500
+ACTIVATE_FREQSHIFT_IN_LIVESTREAM=false
+
+CHANNELS=2
+# Optional light pre-filter applied only in memory before BirdNET inference.
+# Keep 0 to disable either bound. A useful starting point for wind/rumble is
+# 150--250 Hz high-pass; do not use aggressive denoising before recognition.
+ANALYSIS_HIGHPASS_HZ=0
+ANALYSIS_LOWPASS_HZ=0
+# These filters affect the extracted clip heard in the web interface, not the
+# model input. The narrow notches remove the measured 50 Hz mains hum and its
+# strongest harmonics while preserving nearby bird calls.
+PLAYBACK_HIGHPASS_HZ=100
+PLAYBACK_LOWPASS_HZ=16000
+PLAYBACK_NOTCH_HZ=50,150,250
+PLAYBACK_NOTCH_Q=20
+PLAYBACK_DENOISE_PROFILE=
+PLAYBACK_DENOISE_AMOUNT=0.21
+PRIVACY_THRESHOLD=0
+RECORDING_LENGTH=15
+EXTRACTION_LENGTH=
+AUDIOFMT=mp3
+DATABASE_LANG=en
+HEARTBEAT_URL=
+SILENCE_UPDATE_INDICATOR=0
+AUTOMATIC_UPDATE=0
+RAW_SPECTROGRAM=0
+CUSTOM_IMAGE=
+CUSTOM_IMAGE_TITLE=""
+RARE_SPECIES_THRESHOLD=30
+
+LAST_RUN=
+THIS_RUN=
+IDFILE=__AV_HOME__/BirdNET-Pi/IdentifiedSoFar.txt
+LogLevel_BirdnetRecordingService="error"
+LogLevel_LiveAudioStreamService="error"
+LogLevel_SpectrogramViewerService="error"

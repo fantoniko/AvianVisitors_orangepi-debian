@@ -12,7 +12,7 @@ See it running at [bird.onethreenine.net](https://bird.onethreenine.net).
 
 | Qty | Description | Price | Link | Notes |
 |-----|-------------|-------|------| ----- |
-| 1 | Raspberry Pi (4B / 5 / Zero 2W) | ~$35-80 | [Amazon](https://amzn.to/43yLDZJ) | [See note for RPi20](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide) |
+| 1 | Raspberry Pi (4B / 5 / 3A+ / Zero 2W) | ~$25-80 | [Amazon](https://amzn.to/43yLDZJ) | [See note for 512 MB Pis](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide) |
 | 1 | Micro SD Card (≥32 GB) | ~$10 | [Amazon](https://amzn.to/4eGy7te) | |
 | 1 | USB lavalier microphone | $16.95 | [Amazon](https://amzn.to/4vLSaMK) | |
 | 1 | Pi power supply | ~$10 | - | |
@@ -52,13 +52,13 @@ curl -s https://raw.githubusercontent.com/Twarner491/AvianVisitors/avian-visitor
 
 Clones this fork, installs BirdNET-Pi, symlinks the AvianVisitors overlay into the Caddy web root. Takes 20-40 minutes. Reboots when done.
 
-Collage: `http://birdnet.local/`. Stock BirdNET-Pi UI: `http://birdnet.local/index.php`. The menu button in the top right opens an admin overlay with settings, system, log, and tool panels.
+Collage: `http://birdnet.local/`. Stock BirdNET-Pi UI: `http://birdnet.local/index.php`. On a combined BirdNET host, the menu button in the top right opens an admin overlay with settings, system, log, and tool panels. Split web hosts hide those local-only controls; use the Orange Pi URL to administer the hardware.
 
 ---
 
 ## 3. (Optional) Restyle the illustrations
 
-The repo ships with 498 bundled illustrations (249 species, perched + flight). To restyle them or generate a set for your own region:
+The project does not include pre-generated illustration PNGs. Generate a set for your own region:
 
 ```bash
 pip install -r ~/BirdNET-Pi/avian/scripts/requirements.txt
@@ -84,12 +84,27 @@ See [`avian/forwarding/`](avian/forwarding/) for three independent recipes:
 
 ---
 
+## 5. (Optional) Split the recorder and web host
+
+For low-power boards such as Orange Pi Zero 3, keep BirdNET-Pi, the microphone,
+recordings, and `birds.db` on the board, then run the AvianVisitors web UI and
+image work on another LAN computer. See
+[`docs/split-lan-deployment.md`](docs/split-lan-deployment.md). The web host
+and Orange Pi sides can both be installed through the wrapper:
+
+```bash
+sudo bash platforms/deploy.sh orange-pi
+sudo bash platforms/deploy.sh web-host --orange-pi-host <orange-pi-hostname-or-ip>
+```
+
+---
+
 ## Repo layout
 
 ```
 avian/                  # everything we add to BirdNET-Pi
 ├── frontend/           # static HTML/JS/CSS for the collage
-├── assets/             # 498 bundled illustrations + photo-cutout fallbacks
+├── assets/             # runtime-generated illustrations and reference photos
 ├── api/                # PHP shims served by BirdNET-Pi's PHP-FPM
 ├── scripts/            # generate -> cutout -> masks pipeline + prompt
 └── forwarding/         # optional HA / MQTT / Cloudflare configs

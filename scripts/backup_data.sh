@@ -159,8 +159,13 @@ function cleanup()
   exit
 }
 
+database_path="/home/$BIRDNET_USER/BirdNET-Pi/scripts/birds.db"
+if [ -L "$database_path" ]; then
+  database_path="$(readlink -f "$database_path")"
+fi
+
 required=("/home/$BIRDNET_USER/BirdNET-Pi/birdnet.conf"
-"/home/$BIRDNET_USER/BirdNET-Pi/scripts/birds.db"
+"$database_path"
 "/home/$BIRDNET_USER/BirdNET-Pi/BirdDB.txt"
 "/home/$BIRDNET_USER/BirdSongs/Extracted/Charts"
 "/home/$BIRDNET_USER/BirdSongs/Extracted/By_Date")

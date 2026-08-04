@@ -1,35 +1,95 @@
 # Generating illustrations
 
-The collage art is generated, not hand-drawn. The repo ships 498 kachō-e
-illustrations (249 species, a perched and a flight pose each). To restyle
-them or build a set for your own region, the pipeline is four scripts in
-this directory.
+The collage art is generated, not hand-drawn. The repository does not ship
+pre-generated illustration PNGs; build a set for your own region with the
+four-script pipeline in this directory. Run the examples below from the
+repository root.
 
 ## Pipeline
 
-1. `pregen.py` renders each bird with Gemini 2.5 Flash Image, on a flat cream ground.
+1. `pregen.py` renders each bird with Gemini 2.5 Flash Image or a local
+   OpenClaw-compatible image API, on a flat cream ground.
 2. `cutout.py` removes the ground with BiRefNet and crops to the bird.
-3. `build_masks.py` rebuilds the collage silhouette masks inlined in `apt.js`.
+3. `build_masks.py` rebuilds the external `dims.json` and `masks.json` manifests.
 4. `verify.py` (optional) runs an adversarial species-ID + anatomy check.
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv-cutout
+. .venv-cutout/bin/activate
+python -m pip install --upgrade pip wheel
+python -m pip install -r avian/scripts/requirements.txt
+
 export GEMINI_API_KEY='your-key'
 
 # 1. generate (cream ground) for your region's species
-python3 pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region US-CA
+python avian/scripts/pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region US-CA
 
 # 2. cut the ground off and crop
-python3 cutout.py
+python avian/scripts/cutout.py
 
-# 3. rebuild the collage masks, then bump SKETCH_VERSION + IMG_VERSION in apt.js
-python3 build_masks.py
+# 3. rebuild the collage manifests, then bump SKETCH_VERSION + IMG_VERSION in apt.js
+python avian/scripts/build_masks.py
 ```
 
 `--labels` takes any `Sci|Com` per-line file (BirdNET-Pi's `labels.txt` works
 directly). `--ebird-region` filters to species actually seen in your region
 (needs `EBIRD_API_KEY`). Re-render one bird with
 `--species "Calypte anna|Anna's Hummingbird" --force`.
+
+To use a LAN OpenClaw image proxy instead of Gemini:
+
+```bash
+export OPENCLAW_BASE_URL='http://openclaw-host.local:8088'
+export OPENCLAW_API_KEY='your-lan-token'
+
+python avian/scripts/pregen.py \
+  --provider openclaw \
+  --labels ~/BirdNET-Pi/model/labels.txt \
+  --openclaw-size 1024x1024 \
+  --force
+```
+
+The OpenClaw provider calls `/v1/images/generations` with
+`response_format=b64_json` and sends the same anatomy, anti-lookalike, and style
+reference images through the project-specific `references` request field when
+those files are available. If your local proxy does not yet support that
+extension, add `--no-refs` to generate from text prompts only.
+
+After OpenClaw generation, run `cutout.py` before checking the collage. The raw
+image model output is intentionally a flat paper rectangle; `cutout.py` is what
+turns it into transparent RGBA artwork. The default `u2netp` model is selected
+to keep unattended runs within modest memory limits. Process a few slugs at a
+time:
+
+```bash
+. .venv-cutout/bin/activate
+python avian/scripts/cutout.py parus-major --force
+python avian/scripts/cutout.py turdus-merula --force
+python avian/scripts/cutout.py cyanistes-caeruleus --force
+python avian/scripts/build_masks.py
+```
+
+On a host with plenty of spare RAM, the heavier BiRefNet model can be selected
+for potentially finer edges:
+
+```bash
+python avian/scripts/cutout.py turdus-merula --force --model birefnet-general
+python avian/scripts/build_masks.py
+```
+
+Verify transparency with:
+
+```bash
+python - <<'PY'
+from PIL import Image
+for slug in ["parus-major", "turdus-merula", "cyanistes-caeruleus"]:
+    im = Image.open(f"avian/assets/illustrations/{slug}.png").convert("RGBA")
+    print(slug, im.getchannel("A").getextrema())
+PY
+```
+
+Each processed image should report an alpha range like `(0, 255)`. `(255, 255)`
+means the square background is still opaque.
 
 ## Why a cream ground
 
@@ -59,6 +119,12 @@ style. `pregen.py` attaches up to three reference images per request:
   originally are easy to find on the public web by the filenames in `STYLE_REFS`.
 
 All three degrade gracefully: a missing reference is simply not attached.
+
+For a one-off manual image in ChatGPT Plus, without using the Gemini/API
+pipeline, use `manual-chatgpt-collage.prompt.md`. Paste the latest bird counts
+from your installation into its `CURRENT BIRD DATA` block and ask ChatGPT to
+generate a single finished collage image. This does not update the bundled PNG
+library or frontend masks; it is for manual poster-style output.
 
 ## Hard species
 

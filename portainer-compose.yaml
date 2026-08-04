@@ -1,0 +1,87 @@
+name: avian-visitors
+
+services:
+  avian-php:
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-php:${AV_IMAGE_TAG:-web-deploy}
+    environment:
+      AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - avian-illustrations:/srv/generated/illustrations:ro
+      - avian-cutouts:/srv/generated/cutouts:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/app/avian/api/birdnet-api.php && test -d /srv/app/avian/assets/illustrations && php -v >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  avian-web:
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-web:${AV_IMAGE_TAG:-web-deploy}
+    depends_on:
+      - avian-php
+    ports:
+      - "${AV_WEB_PORT:-8080}:8080"
+    environment:
+      AV_BIRDNET_API_BASE: ${AV_BIRDNET_API_BASE:-http://op3.lc:8079/avian/api}
+      TZ: ${TZ:-Europe/Moscow}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/app/avian/api/birdnet-api.php && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  avian-worker:
+    image: ${AV_IMAGE_REGISTRY:-ghcr.io/fantoniko}/avian-visitors-worker:${AV_IMAGE_TAG:-web-deploy}
+    depends_on:
+      - avian-web
+    environment:
+      AV_RECENT_API_URL: ${AV_RECENT_API_URL:-http://avian-web:8080/avian/api/birdnet-api.php?action=recent&hours=24}
+      AV_IMAGE_WORKER_INTERVAL_SECONDS: ${AV_IMAGE_WORKER_INTERVAL_SECONDS:-3600}
+      AV_IMAGE_WORKER_START_DELAY_SECONDS: ${AV_IMAGE_WORKER_START_DELAY_SECONDS:-300}
+      AV_IMAGE_WORKER_RUN_ON_START: ${AV_IMAGE_WORKER_RUN_ON_START:-1}
+      AV_IMAGE_WORKER_ACTIVE_START: ${AV_IMAGE_WORKER_ACTIVE_START:-08:00}
+      AV_IMAGE_WORKER_ACTIVE_END: ${AV_IMAGE_WORKER_ACTIVE_END:-22:00}
+      AV_IMAGE_WORKER_STATE: ${AV_IMAGE_WORKER_STATE:-/srv/app/avian/runtime/image-worker-state.json}
+      AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS: ${AV_IMAGE_WORKER_FAILURE_COOLDOWN_SECONDS:-86400}
+      AV_IMAGE_WORKER_LIMIT: ${AV_IMAGE_WORKER_LIMIT:-20}
+      AV_IMAGE_WORKER_SIZE: ${AV_IMAGE_WORKER_SIZE:-1536x1024}
+      AV_IMAGE_WORKER_CUTOUT_MODEL: ${AV_IMAGE_WORKER_CUTOUT_MODEL:-u2netp}
+      AV_IMAGE_WORKER_CUTOUT_RETRIES: ${AV_IMAGE_WORKER_CUTOUT_RETRIES:-1}
+      AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY: ${AV_IMAGE_WORKER_CUTOUT_RETRY_DELAY:-15}
+      AV_IMAGE_WORKER_CHOWN: ${AV_IMAGE_WORKER_CHOWN:-0}
+      AV_HOST_UID: ${AV_HOST_UID:-1000}
+      AV_HOST_GID: ${AV_HOST_GID:-1000}
+      TZ: ${TZ:-Europe/Moscow}
+      AV_ONNX_THREADS: ${AV_ONNX_THREADS:-2}
+      MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
+      OPENCLAW_BASE_URL: ${OPENCLAW_BASE_URL:?set OPENCLAW_BASE_URL}
+      OPENCLAW_API_KEY: ${OPENCLAW_API_KEY:?set OPENCLAW_API_KEY}
+      OPENCLAW_MODEL: ${OPENCLAW_MODEL:-openclaw-image}
+      U2NET_HOME: /root/.u2net
+    volumes:
+      - avian-illustrations:/srv/generated/illustrations
+      - avian-references:/srv/generated/references
+      - avian-runtime:/srv/generated/runtime
+      - avian-u2net:/root/.u2net
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/app/avian/scripts/auto_illustrate_recent.py && test -w /srv/app/avian/assets/illustrations"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  avian-illustrations:
+    name: ${AV_ILLUSTRATIONS_VOLUME_NAME:-avian-visitors-illustrations}
+  avian-references:
+    name: ${AV_REFERENCES_VOLUME_NAME:-avian-visitors-references}
+  avian-cutouts:
+    name: ${AV_CUTOUTS_VOLUME_NAME:-avian-visitors-cutouts}
+  avian-runtime:
+    name: ${AV_RUNTIME_VOLUME_NAME:-avian-visitors-runtime}
+  avian-u2net:

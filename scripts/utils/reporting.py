@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import io
 import soundfile
+from contextlib import closing
+from configparser import Error as ConfigError
 from time import sleep
 
 import requests
@@ -19,8 +21,70 @@ from .notifications import sendAppriseNotifications
 log = logging.getLogger(__name__)
 
 
-def extract(in_file, out_file, start, stop):
-    result = subprocess.run(['sox', '-V1', f'{in_file}', f'{out_file}', 'trim', f'={start}', f'={stop}'],
+def _config_float(conf, key, default=0.0):
+    try:
+        value = conf.getfloat(key)
+        return default if value is None else value
+    except (ConfigError, KeyError, TypeError, ValueError):
+        return default
+
+
+def _config_frequencies(conf, key):
+    """Read a comma/space-separated list of positive frequencies."""
+    try:
+        raw = conf.get(key, '')
+    except (ConfigError, KeyError, TypeError):
+        return []
+
+    frequencies = []
+    for value in raw.replace(',', ' ').split():
+        try:
+            frequency = float(value)
+        except ValueError:
+            log.warning('Ignoring invalid %s frequency: %s', key, value)
+            continue
+        if frequency <= 0:
+            log.warning('Ignoring non-positive %s frequency: %s', key, value)
+            continue
+        if frequency not in frequencies:
+            frequencies.append(frequency)
+    return frequencies
+
+
+def playback_effects(conf):
+    """Build optional SoX effects for the clip served by the web player."""
+    effects = []
+    highpass_hz = _config_float(conf, 'PLAYBACK_HIGHPASS_HZ')
+    lowpass_hz = _config_float(conf, 'PLAYBACK_LOWPASS_HZ')
+    notch_frequencies = _config_frequencies(conf, 'PLAYBACK_NOTCH_HZ')
+    notch_q = _config_float(conf, 'PLAYBACK_NOTCH_Q', 20.0)
+    denoise_profile = conf.get('PLAYBACK_DENOISE_PROFILE', '').strip()
+    denoise_amount = _config_float(conf, 'PLAYBACK_DENOISE_AMOUNT', 0.21)
+
+    if highpass_hz > 0:
+        effects += ['highpass', str(highpass_hz)]
+    if notch_frequencies:
+        if notch_q <= 0:
+            log.warning('PLAYBACK_NOTCH_Q must be positive; using 20')
+            notch_q = 20.0
+        for frequency in notch_frequencies:
+            effects += ['bandreject', f'{frequency:g}', f'{notch_q:g}q']
+    if lowpass_hz > 0:
+        effects += ['lowpass', str(lowpass_hz)]
+    if denoise_profile:
+        if os.path.isfile(os.path.expanduser(denoise_profile)):
+            # SoX accepts 0.01--1.0; values near 0.2 are deliberately gentle.
+            effects += ['noisered', os.path.expanduser(denoise_profile), str(min(1.0, max(0.01, denoise_amount)))]
+        else:
+            log.warning('PLAYBACK_DENOISE_PROFILE does not exist: %s; skipping noise reduction', denoise_profile)
+    return effects
+
+
+def extract(in_file, out_file, start, stop, effects=None):
+    args = ['sox', '-V1', f'{in_file}', f'{out_file}', 'trim', f'={start}', f'={stop}']
+    if effects:
+        args.extend(effects)
+    result = subprocess.run(args,
                             check=True, capture_output=True)
     ret = result.stdout.decode('utf-8')
     err = result.stderr.decode('utf-8')
@@ -43,7 +107,7 @@ def extract_safe(in_file, out_file, start, stop):
     safe_start = max(0, start - spacer)
     safe_stop = min(conf.getint('RECORDING_LENGTH'), stop + spacer)
 
-    extract(in_file, out_file, safe_start, safe_stop)
+    extract(in_file, out_file, safe_start, safe_stop, playback_effects(conf))
 
 
 def spectrogram(in_file, title, comment, raw=0):
@@ -89,25 +153,35 @@ def extract_detection(file: ParseFileName, detection: Detection):
 
 def write_to_db(file: ParseFileName, detection: Detection):
     conf = get_settings()
-    # Connect to SQLite Database
+    file_name = os.path.basename(detection.file_name_extr)
+    values = (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
+              conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
+              conf['OVERLAP'], file_name)
+    last_error = None
     for attempt_number in range(3):
         try:
-            con = sqlite3.connect(DB_PATH)
-            cur = con.cursor()
-            cur.execute("INSERT INTO detections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
-                         conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
-                         conf['OVERLAP'], os.path.basename(detection.file_name_extr)))
-            # (Date, Time, Sci_Name, Com_Name, str(score),
-            # Lat, Lon, Cutoff, Week, Sens,
-            # Overlap, File_Name))
+            # sqlite3.Connection.__exit__ commits or rolls back but does not
+            # close the file descriptor, so use closing() as the outer guard.
+            with closing(sqlite3.connect(DB_PATH, timeout=10)) as con:
+                with con:
+                    # Reporting can be retried after a later step fails. Guard
+                    # by File_Name so replaying a WAV does not duplicate rows.
+                    cursor = con.execute(
+                        """INSERT INTO detections
+                           (Date, Time, Sci_Name, Com_Name, Confidence, Lat, Lon, Cutoff, Week, Sens, Overlap, File_Name)
+                           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                           WHERE NOT EXISTS (SELECT 1 FROM detections WHERE File_Name = ?)""",
+                        values + (file_name,))
+                    if cursor.rowcount == 0:
+                        log.info('Detection already stored; skipping duplicate: %s', file_name)
+            return
+        except sqlite3.OperationalError as error:
+            last_error = error
+            log.warning("Database write attempt %d/3 failed: %s", attempt_number + 1, error)
+            if attempt_number < 2:
+                sleep(2)
 
-            con.commit()
-            con.close()
-            break
-        except BaseException as e:
-            log.warning("Database busy: %s", e)
-            sleep(2)
+    raise RuntimeError(f'Unable to write detection to database after 3 attempts: {last_error}') from last_error
 
 
 def summary(file: ParseFileName, detection: Detection):
