@@ -10,7 +10,6 @@ updated in a later release.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import re
@@ -129,6 +128,21 @@ def clear_failure(state: dict, slug: str) -> None:
     failures.pop(slug, None)
 
 
+def select_work_bases(species: list[tuple[str, str]], candidate_bases: set[str],
+                      limit: int) -> set[str]:
+    """Choose species that actually need work, preserving API recency order.
+
+    The limit belongs here rather than on the API response.  Limiting the raw
+    response lets already-rendered, frequently detected species occupy every
+    slot forever, starving an older missing species from the image worker.
+    """
+    ordered = [slugify(sci) for sci, _com in species
+               if slugify(sci) in candidate_bases]
+    if limit > 0:
+        ordered = ordered[:limit]
+    return set(ordered)
+
+
 def is_transparent_png(path: Path) -> bool:
     try:
         from PIL import Image
@@ -172,7 +186,7 @@ def main() -> int:
     ap.add_argument("--hours", type=int, default=None,
                     help="replace/add hours= in --api-url")
     ap.add_argument("--limit", type=int, default=20,
-                    help="maximum recent species to consider (default: 20)")
+                    help="maximum species needing image work to process (default: 20; 0=all)")
     ap.add_argument("--poses", type=int, choices=(1, 2), nargs="+", default=[1, 2],
                     help="poses to generate; 1=perched, 2=flight (default: 1 2)")
     ap.add_argument("--provider", choices=("gemini", "openclaw"), default="openclaw")
@@ -212,6 +226,10 @@ def main() -> int:
             ap.error(str(exc))
 
     repo = args.repo.resolve()
+    # Linux-only advisory locking; imported here so the worker's pure helper
+    # functions remain importable by development/test tooling on Windows.
+    import fcntl
+
     load_env_file(repo / ".env.openclaw")
     illustrations = repo / "avian" / "assets" / "illustrations"
     state_path = args.state or repo / "avian" / "runtime" / "image-worker-state.json"
@@ -250,7 +268,7 @@ def main() -> int:
                 parsed._replace(query=urllib.parse.urlencode(query))
             )
 
-        species = fetch_recent(api_url)[: args.limit]
+        species = fetch_recent(api_url)
         seen_slugs = [slugify(sci) for sci, _com in species]
         stats = {
             "recent_species": len(species),
@@ -268,20 +286,30 @@ def main() -> int:
         needs_cutout = []
         for sci, com in species:
             base = slugify(sci)
-            if failure_retry_active(state, base, now):
+            cooldown = failure_retry_active(state, base, now)
+            if cooldown:
                 stats["skipped_cooldown"] += 1
                 print(f"  [cooldown] {base} skipped until retry_after")
-                continue
             for pose in args.poses:
                 slug = base if pose == 1 else f"{base}-{pose}"
                 path = illustrations / f"{slug}.png"
                 if not path.exists():
-                    missing.append((sci, com))
+                    if not cooldown:
+                        missing.append((sci, com))
                     break
                 if not is_transparent_png(path):
                     needs_cutout.append(slug)
 
+        candidate_bases = {slugify(sci) for sci, _com in missing}
+        candidate_bases.update(slug.removesuffix("-2") for slug in needs_cutout)
+        selected_bases = select_work_bases(species, candidate_bases, args.limit)
+        missing = [(sci, com) for sci, com in missing
+                   if slugify(sci) in selected_bases]
+        needs_cutout = [slug for slug in needs_cutout
+                        if slug.removesuffix("-2") in selected_bases]
+
         stats["missing_species"] = len(missing)
+        generation_error = None
         if missing:
             lines = "\n".join(f"{sci}|{com}" for sci, com in missing) + "\n"
             cmd = [
@@ -300,17 +328,25 @@ def main() -> int:
                 run(cmd, input_text=lines)
             except subprocess.CalledProcessError as exc:
                 reason = f"pregen exited {exc.returncode}"
+                incomplete = False
                 for sci, com in missing:
-                    record_failure(state, slugify(sci), sci, com, reason, now,
-                                   max(0, args.failure_cooldown_seconds))
-                state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
-                                     "error": reason}
-                write_state(state_path, state)
-                raise
+                    base = slugify(sci)
+                    complete = all(
+                        (illustrations / f"{base if pose == 1 else f'{base}-{pose}'}.png").exists()
+                        for pose in args.poses
+                    )
+                    if complete:
+                        clear_failure(state, base)
+                    else:
+                        incomplete = True
+                        record_failure(state, base, sci, com, reason, now,
+                                       max(0, args.failure_cooldown_seconds))
+                if incomplete:
+                    generation_error = reason
 
         for sci, _com in species:
             base = slugify(sci)
-            if failure_retry_active(state, base, now):
+            if base not in selected_bases:
                 continue
             for pose in args.poses:
                 slug = base if pose == 1 else f"{base}-{pose}"
@@ -352,7 +388,8 @@ def main() -> int:
                 ], retries=args.cutout_retries, delay=args.cutout_retry_delay)
             except subprocess.CalledProcessError as exc:
                 reason = f"cutout exited {exc.returncode}"
-                record_failure(state, slug, slug.replace("-", " "), "", reason, now,
+                base = slug.removesuffix("-2")
+                record_failure(state, base, base.replace("-", " "), "", reason, now,
                                max(0, args.failure_cooldown_seconds))
                 state["last_run"] = {"at": iso(now), "status": "failed", "stats": stats,
                                      "error": reason}
@@ -362,10 +399,13 @@ def main() -> int:
         for slug in seen_slugs:
             if (illustrations / f"{slug}.png").exists() and is_transparent_png(illustrations / f"{slug}.png"):
                 clear_failure(state, slug)
-        state["last_run"] = {"at": iso(now), "status": "ok", "stats": stats}
+        state["last_run"] = {"at": iso(now), "status": "failed" if generation_error else "ok",
+                             "stats": stats}
+        if generation_error:
+            state["last_run"]["error"] = generation_error
         write_state(state_path, state)
 
-    return 0
+    return 1 if generation_error else 0
 
 
 if __name__ == "__main__":

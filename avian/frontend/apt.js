@@ -702,6 +702,22 @@
           buildRuntimeMask(r.slug, imgEl);
         }, { once: true });
       }
+      // A newly detected species can reach the collage before the background
+      // image worker has rendered it.  A failed <img> does not retry by itself,
+      // and unchanged API data deliberately does not rebuild the collage, so
+      // retry the resolver periodically until the worker's PNG appears.
+      imgEl.addEventListener('error', function retryMissingCutout() {
+        if (imgEl._cutoutRetry) return;
+        imgEl._cutoutRetry = setTimeout(function () {
+          imgEl._cutoutRetry = null;
+          if (!imgEl.isConnected) return;
+          imgEl.src = img + '&retry=' + Math.floor(Date.now() / 300000);
+        }, 300000);
+      });
+      imgEl.addEventListener('load', function () {
+        if (imgEl._cutoutRetry) clearTimeout(imgEl._cutoutRetry);
+        imgEl._cutoutRetry = null;
+      });
       imgEl.src = img;
       btn.appendChild(imgEl);
       r.el = btn;

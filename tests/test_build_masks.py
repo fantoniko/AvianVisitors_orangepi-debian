@@ -1,6 +1,7 @@
 import base64
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -16,6 +17,18 @@ def load_module():
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
+    return module
+
+
+def load_worker_module():
+    sys.path.insert(0, str(WORKER_PATH.parent))
+    spec = importlib.util.spec_from_file_location("avian_image_worker", WORKER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
     return module
 
 
@@ -83,3 +96,25 @@ def test_automatic_worker_does_not_mutate_immutable_frontend():
     assert 'repo / "avian" / "frontend"' not in source
     assert 'repo / "avian" / "scripts" / "build_masks.py"' not in source
     assert 'repo / "avian" / "assets" / "illustrations"' in source
+
+
+def test_worker_limit_is_applied_to_missing_species_not_raw_recent_rows():
+    worker = load_worker_module()
+    species = [(f"Genus species{i}", f"Bird {i}") for i in range(21)]
+    missing = {worker.slugify(species[20][0])}
+
+    selected = worker.select_work_bases(species, missing, limit=20)
+
+    assert selected == missing
+
+
+def test_worker_limit_caps_only_species_that_need_work():
+    worker = load_worker_module()
+    species = [(f"Genus species{i}", f"Bird {i}") for i in range(25)]
+    candidates = {worker.slugify(sci) for sci, _com in species}
+
+    selected = worker.select_work_bases(species, candidates, limit=20)
+
+    assert len(selected) == 20
+    assert worker.slugify(species[19][0]) in selected
+    assert worker.slugify(species[20][0]) not in selected
